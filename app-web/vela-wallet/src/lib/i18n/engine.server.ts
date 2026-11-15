@@ -24,16 +24,16 @@ import {
 	BALANCE_INTERNAL_KEYS,
 	BALANCE_SAID_KEYS,
 	type WalletMessages
-} from '$lib/wallet/messages';
-import type { ContactsMessages } from '$lib/contacts/messages';
-import { INTRO_KEYS } from '$lib/intro/slides';
-import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
-import type { ExploreMessages } from '$lib/explore/messages';
-import type { RequestMessages } from '$lib/dapp/messages';
-import type { AgentMessages } from '$lib/agent/messages';
-import type { NetworkSpaceMessages } from '$lib/network-space/messages';
-import type { ExtensionMessages } from '$lib/extension/messages';
-import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
+} from '#lib/wallet/messages.ts';
+import type { ContactsMessages } from '#lib/contacts/messages.ts';
+import { INTRO_KEYS } from '#lib/intro/slides.ts';
+import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '#lib/flows/messages.ts';
+import type { ExploreMessages } from '#lib/explore/messages.ts';
+import type { RequestMessages } from '#lib/dapp/messages.ts';
+import type { AgentMessages } from '#lib/agent/messages.ts';
+import type { NetworkSpaceMessages } from '#lib/network-space/messages.ts';
+import type { ExtensionMessages } from '#lib/extension/messages.ts';
+import { MULTISIG_SHAPE, type MultisigMessages } from '#lib/multisig/messages.ts';
 import {
 	CERTAIN_KEYS,
 	SIM_SAID_KEYS,
@@ -42,8 +42,8 @@ import {
 	SIM_WILL_FAIL_REASON_KEY,
 	type HandoffMessages,
 	type SigningMessages
-} from '$lib/signing/messages';
-import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
+} from '#lib/signing/messages.ts';
+import { CLEAR_TERMS, INTENT_TERMS } from '#lib/signing/terms.ts';
 import {
 	BACKUP_EXPLAIN_KEYS,
 	BACKUP_ROW_KEYS,
@@ -61,9 +61,9 @@ import {
 	type NetStopKey,
 	type SettingsMessages,
 	type VenueBlockKey
-} from '$lib/settings/messages';
-import type { AppPromptMessages } from '$lib/app-prompt/messages';
-import { PAY_MESSAGE_KEYS, type PayMessages } from '$lib/pay/link';
+} from '#lib/settings/messages.ts';
+import type { AppPromptMessages } from '#lib/app-prompt/messages.ts';
+import { PAY_MESSAGE_KEYS, type PayMessages } from '#lib/pay/link.ts';
 import type { PluralCopy } from './plural';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
@@ -1364,7 +1364,7 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
 /**
  * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
  * RJ13) — one list for the sheet and the send screens, kept beside the send
- * screens' keys (`$lib/flows/messages`, client-safe).
+ * screens' keys (`#lib/flows/messages.ts`, client-safe).
  */
 export { FEE_REASON_KEYS };
 

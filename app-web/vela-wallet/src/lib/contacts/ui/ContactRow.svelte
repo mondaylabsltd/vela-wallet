@@ -5,7 +5,7 @@
 	 * call, 2026-09-05), and a button inside a button is invalid HTML — so the
 	 * hover raise lives on the row that holds both.
 	 */
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 	import type { ContactModel } from '../model';
 
 	interface Props {

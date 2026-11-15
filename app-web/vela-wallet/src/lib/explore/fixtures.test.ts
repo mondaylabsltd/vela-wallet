@@ -4,9 +4,9 @@
  * the mock draws (which is the thing a refactor silently breaks).
  */
 import { describe, expect, it } from 'vitest';
-import { rawResolve, resolveExploreMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { pluralForm } from '$lib/i18n/plural';
+import { rawResolve, resolveExploreMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { pluralForm } from '#lib/i18n/plural.ts';
 import {
 	buildDesktopState,
 	buildMobileState,

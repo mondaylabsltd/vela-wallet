@@ -13,8 +13,8 @@
 	 * `done` wears the success colour for the thing it just did. Every pill
 	 * gives under the finger, like everything else here that can be pressed.
 	 */
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Item {
 		id: string;

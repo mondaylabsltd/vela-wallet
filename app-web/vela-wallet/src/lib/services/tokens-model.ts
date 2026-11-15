@@ -4,7 +4,7 @@
  * The `APIToken` shape and its computed helpers, ported (trimmed) from
  * src/models/types.ts @ c13e89d4. Everything else in that file belongs to
  * other domains and stays with them. Which logo a token wears is not here:
- * that rule is the core's (`$lib/flows/marks`).
+ * that rule is the core's (`#lib/flows/marks.ts`).
  */
 
 import { apiNetworkToChainId } from './chains';

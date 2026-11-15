@@ -21,9 +21,9 @@ import { flushSync, tick } from 'svelte';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 
-vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
+vi.mock('#lib/signing/core/sign-resident.svelte.ts', () => ({
 	signRequest: {
 		get view() {
 			return fake.sign.view;
@@ -37,7 +37,7 @@ vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
 		dispatch: (event: unknown) => fake.dispatched.push(event)
 	}
 }));
-vi.mock('$lib/signing/core/sheet.svelte', () => ({
+vi.mock('#lib/signing/core/sheet.svelte.ts', () => ({
 	signingSheet: {
 		present: async () => {},
 		dismiss: () => {},
@@ -46,7 +46,7 @@ vi.mock('$lib/signing/core/sheet.svelte', () => ({
 		dispatchGuard: () => {}
 	}
 }));
-vi.mock('$lib/session/core/session.svelte', () => ({
+vi.mock('#lib/session/core/session.svelte.ts', () => ({
 	session: {
 		view: {
 			loading: false,
@@ -66,11 +66,11 @@ vi.mock('$lib/session/core/session.svelte', () => ({
 		}
 	}
 }));
-import { loadCore } from '$lib/core/client';
+import { loadCore } from '#lib/core/client.ts';
 
 beforeAll(() => loadCore());
 
-vi.mock('$lib/settings/core/currency.svelte', () => ({
+vi.mock('#lib/settings/core/currency.svelte.ts', () => ({
 	currency: {
 		view: {},
 		boot: async () => {
@@ -78,29 +78,29 @@ vi.mock('$lib/settings/core/currency.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
-vi.mock('$lib/services/networks', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/networks')>()),
+vi.mock('#lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
+vi.mock('#lib/services/networks.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/networks.ts')>()),
 	explorerBaseURL: () => null
 }));
-vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
+vi.mock('#lib/signing/fee-calls.ts', () => ({ feeCallsOf: () => fake.calls }));
 // The node's reply to the sheet's one simulation. `simulateRequest`, the
 // core's reading of the reply (`simOutcome`) and the trust machine's judgment
 // of a check's moves (the resident `token_trust` session) are real.
 // R22: the reply as two independent nodes gave it alike (the corroborated
 // envelope `rpcSimulateReply` now hands over) — an honest network.
-vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
+vi.mock('#lib/services/sim/sim-engine-rpc.ts', () => ({
 	rpcSimulateReply: async (from: string, calls: unknown[], chainId: number) => {
 		fake.simulated.push({ from, calls, chainId });
 		const reply = await fake.nodeReply();
-		return (await import('$lib/signing/sim-witnessed')).agreed(reply);
+		return (await import('#lib/signing/sim-witnessed.ts')).agreed(reply);
 	}
 }));
-vi.mock('$lib/core/kernels', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/kernels')>()),
+vi.mock('#lib/core/kernels.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/kernels.ts')>()),
 	typicalInclusionSeconds: () => 5
 }));
-vi.mock('$lib/flows/core/speed-control.svelte', () => ({
+vi.mock('#lib/flows/core/speed-control.svelte.ts', () => ({
 	SpeedControl: class {
 		attach() {}
 		boot() {
@@ -131,14 +131,14 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/wallet/core/tracker-resident', () => ({
+vi.mock('#lib/wallet/core/tracker-resident.ts', () => ({
 	subscribeTxTracker: (fn: () => void) => {
 		fake.trackerListeners.add(fn);
 		return () => fake.trackerListeners.delete(fn);
 	},
 	txTrackerView: () => ({ entries: fake.trackerEntries })
 }));
-vi.mock('$lib/signing/live', () => ({
+vi.mock('#lib/signing/live.ts', () => ({
 	// What the approve carries is `signing/live.test.ts`'s (spec 093).
 	approveOptsOf: () => ({}),
 	signingCloseEvent: (status: { closable: boolean } | undefined) =>
@@ -214,8 +214,8 @@ vi.mock('$lib/signing/live', () => ({
 }));
 // The landing's words follow the tracker's entry; the core's ending rule has
 // its own suite (`dapp-receipt.test.ts`).
-vi.mock('$lib/signing/dapp-receipt', async (importOriginal) => {
-	const real = await importOriginal<typeof import('$lib/signing/dapp-receipt')>();
+vi.mock('#lib/signing/dapp-receipt.ts', async (importOriginal) => {
+	const real = await importOriginal<typeof import('#lib/signing/dapp-receipt.ts')>();
 	return {
 		...real,
 		landingFor: (
@@ -234,8 +234,8 @@ vi.mock('$lib/signing/dapp-receipt', async (importOriginal) => {
 });
 
 import SigningHost from './SigningHost.svelte';
-import { panelSurface } from '$lib/dapp/panel-surface.svelte';
-import { INITIAL_SIGN_VIEW } from '$lib/signing/core/sign-resident.svelte';
+import { panelSurface } from '#lib/dapp/panel-surface.svelte.ts';
+import { INITIAL_SIGN_VIEW } from '#lib/signing/core/sign-resident.svelte.ts';
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

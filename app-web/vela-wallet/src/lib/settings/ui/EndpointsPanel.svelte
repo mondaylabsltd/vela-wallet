@@ -7,8 +7,8 @@
 	 * anybody who can point these at their own boxes needs a way back.
 	 */
 	import type { EndpointsModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import UrlField from './UrlField.svelte';
 
 	interface Props {

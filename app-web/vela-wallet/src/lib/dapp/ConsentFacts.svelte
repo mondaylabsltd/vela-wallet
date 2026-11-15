@@ -8,8 +8,8 @@
 	 *
 	 * Hairline rows, no card: the wallet's minimal language.
 	 */
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import RemoteLogo from '#lib/wallet/ui/RemoteLogo.svelte';
 
 	interface Props {
 		accountLabel: string;

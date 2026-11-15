@@ -9,10 +9,10 @@
  * person actually performs — someone shows a code, someone else scans it.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { loadCore, PaymentRequestCore } from '$lib/core/client';
-import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
-import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
-import { encodeQr } from '$lib/wallet/qr';
+import { loadCore, PaymentRequestCore } from '#lib/core/client.ts';
+import type { PaymentRequestEvent } from '#lib/core/generated/PaymentRequestEvent.ts';
+import type { PaymentRequestView } from '#lib/core/generated/PaymentRequestView.ts';
+import { encodeQr } from '#lib/wallet/qr.ts';
 import {
 	CAMERA_FRAME_WIDTH,
 	STILL_MAX_WIDTH,

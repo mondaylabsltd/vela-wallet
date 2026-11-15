@@ -6,7 +6,7 @@
  * `an_invites_labels_land_only_on_members`,
  * `an_invites_labels_for_members_added_since_and_by_order`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 

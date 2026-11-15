@@ -3,9 +3,9 @@
  * core's `remote_mark` rule, not a session-long set — a miss during a network
  * blip used to keep every token a letter until the wallet was reopened.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { markMissTtlMs } from '$lib/core/kernels';
+import { markMissTtlMs } from '#lib/core/kernels.ts';
 import { hasFailed, markFailed, missTtlMs, probeMiss, resetLogoCacheForTests } from './logo-cache';
 
 const URL = 'https://data.example/logos/0xabc.png';

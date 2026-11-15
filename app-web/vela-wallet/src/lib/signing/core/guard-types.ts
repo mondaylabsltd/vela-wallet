@@ -8,9 +8,9 @@
  * `.web` module would drag the web-only service graph into the native bundle.
  */
 
-import type { GuardOperation } from '$lib/core/generated/GuardOperation';
-import type { GuardView } from '$lib/core/generated/GuardView';
-import type { SessionOptions } from '$lib/core/types';
+import type { GuardOperation } from '#lib/core/generated/GuardOperation.ts';
+import type { GuardView } from '#lib/core/generated/GuardView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type GuardEffect = { id: number; operation: GuardOperation };

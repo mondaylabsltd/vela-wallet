@@ -6,7 +6,7 @@
  * `safe-transaction.ts` reads `value` as HEX. Getting this wrong does not fail
  * loudly — it signs a different number.
  */
-import type { FeeCall } from '$lib/core/generated/FeeCall';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
 
 export function toShellCall(call: FeeCall): { to: string; value: string; data: string } {
 	return { to: call.to, value: decimalToHex(call.value), data: call.data };

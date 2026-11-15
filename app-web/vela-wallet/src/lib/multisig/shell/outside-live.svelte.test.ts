@@ -9,9 +9,9 @@
  * is reviewed before the wallet is asked — never handed over unread.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { signEthereum } from '$lib/testing/secp256k1';
+import { signEthereum } from '#lib/testing/secp256k1.ts';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { loadCore } from '$lib/core/client';
+import { loadCore } from '#lib/core/client.ts';
 import { safeTxHash, type SafeTx } from '../core/kernel';
 import type { OutsidePageEvent } from '../generated/OutsidePageEvent';
 import type { OutsidePageView } from '../generated/OutsidePageView';

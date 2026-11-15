@@ -16,9 +16,9 @@
  * message, a request with no calls, a call with no recipient. Anything that is
  * a transaction and has a recipient comes back as calls.
  */
-import { dappRequestCalls } from '$lib/core/kernels';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
+import { dappRequestCalls } from '#lib/core/kernels.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { SignMethodKind } from '#lib/core/generated/SignMethodKind.ts';
 
 /**
  * The calls to price, or `null` when there is nothing on chain.

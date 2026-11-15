@@ -6,11 +6,11 @@
  * toolbar, the site menu and the connection panel. For `http://127.0.0.1:8137`
  * each drew a padlock (two of them drew one for every page); none does now.
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { loadCore } from '$lib/core/client';
-import { UTILITY_ICONS, type IconDef } from '$lib/wallet/icons';
+import { loadCore } from '#lib/core/client.ts';
+import { UTILITY_ICONS, type IconDef } from '#lib/wallet/icons.ts';
 import type { ExploreMessages } from '../messages';
 import type { BrowserModel, ConnectionModel, ExploreDesktopModel, SiteModel } from '../model';
 import { siteMark } from '../site-mark';

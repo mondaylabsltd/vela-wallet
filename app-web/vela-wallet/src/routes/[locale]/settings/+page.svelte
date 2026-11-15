@@ -26,63 +26,63 @@
 	 * - **Still canon data**: the latency figures and the storage accounting
 	 *   — those wait for the features that measure them.
 	 */
-	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
+	import CoreWaiting from '#lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
-	import { storedUnreadable } from '$lib/onboarding/core/storage';
-	import { replaceUrl } from '$lib/ui/history';
+	import { storedUnreadable } from '#lib/onboarding/core/storage.ts';
+	import { replaceUrl } from '#lib/ui/history.ts';
 	import { goto } from '$app/navigation';
-	import { STAY_QUERY } from '$lib/intro/gate';
+	import { STAY_QUERY } from '#lib/intro/gate.ts';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
-	import SettingsDesktop from '$lib/settings/SettingsDesktop.svelte';
-	import SettingsHome from '$lib/settings/SettingsHome.svelte';
-	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
-	import SignOutHost from '$lib/session/ui/SignOutHost.svelte';
-	import { desktopWithIdentity, homeWithIdentity } from '$lib/settings/identity';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
-	import { session } from '$lib/session/core/session.svelte';
-	import { foundingKeyOf, startEthereumBackup } from '$lib/backup/ethereum-backup';
-	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
-	import SigningHost from '$lib/signing/SigningHost.svelte';
-	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
+	import SettingsDesktop from '#lib/settings/SettingsDesktop.svelte';
+	import SettingsHome from '#lib/settings/SettingsHome.svelte';
+	import IdenticonViewerHost from '#lib/wallet/ui/IdenticonViewerHost.svelte';
+	import SignOutHost from '#lib/session/ui/SignOutHost.svelte';
+	import { desktopWithIdentity, homeWithIdentity } from '#lib/settings/identity.ts';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { foundingKeyOf, startEthereumBackup } from '#lib/backup/ethereum-backup.ts';
+	import { FeeQuote } from '#lib/flows/core/fee-quote.svelte.ts';
+	import SigningHost from '#lib/signing/SigningHost.svelte';
+	import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
 	import {
 		CHECKING_ROW,
 		checkEthereumBackup,
 		lastBackupRow,
 		type EthereumBackupRow
-	} from '$lib/services/registry-backup';
+	} from '#lib/services/registry-backup.ts';
 	import {
 		deviceOnlyKeys,
 		keysWorthAskingAgain,
 		readWalletKeys,
 		type WalletKeys
-	} from '$lib/services/wallet-keys';
-	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
-	import { currency } from '$lib/settings/core/currency.svelte';
-	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
-	import { venueModel } from '$lib/settings/venue';
-	import { track } from '$lib/analytics';
-	import { analyticsConsent } from '$lib/analytics/consent.svelte';
-	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
+	} from '#lib/services/wallet-keys.ts';
+	import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
+	import { currency } from '#lib/settings/core/currency.svelte.ts';
+	import { feeTierPreference } from '#lib/settings/core/fee-tier.svelte.ts';
+	import { signingVenueBlock, signingVenueChoices } from '#lib/core/kernels.ts';
+	import { venueModel } from '#lib/settings/venue.ts';
+	import { track } from '#lib/analytics/index.ts';
+	import { analyticsConsent } from '#lib/analytics/consent.svelte.ts';
+	import { refuseBlind } from '#lib/settings/refuse-blind.svelte.ts';
 	import {
 		agentSetUp,
 		agentSettings,
 		bridgeUrlProblem,
 		mcpEndpoint
-	} from '$lib/agent/settings.svelte';
-	import { agentLink, type LinkProblem } from '$lib/agent/link.svelte';
-	import type { AgentMessages } from '$lib/agent/messages';
+	} from '#lib/agent/settings.svelte.ts';
+	import { agentLink, type LinkProblem } from '#lib/agent/link.svelte.ts';
+	import type { AgentMessages } from '#lib/agent/messages.ts';
 	import { page } from '$app/state';
-	import { fill } from '$lib/wallet/messages';
+	import { fill } from '#lib/wallet/messages.ts';
 	import type {
 		AgentPanelModel,
 		SettingsRowModel,
 		SitesPanelModel,
 		StatusPillModel,
 		SwitchRowModel
-	} from '$lib/settings/model';
-	import { hostLabel } from '$lib/dapp/host';
+	} from '#lib/settings/model.ts';
+	import { hostLabel } from '#lib/dapp/host.ts';
 	import {
 		accountAmount,
 		accountLoading,
@@ -97,16 +97,16 @@
 		withLiveNetworks,
 		withLiveNetworksDesktop,
 		withLiveStorage
-	} from '$lib/settings/live';
-	import type { LiveOwnNodes } from '$lib/settings/live';
-	import { ownNodes } from '$lib/services/own-node.svelte';
-	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
+	} from '#lib/settings/live.ts';
+	import type { LiveOwnNodes } from '#lib/settings/live.ts';
+	import { ownNodes } from '#lib/services/own-node.svelte.ts';
+	import { listGrants, revokeAll, revokeGrant } from '#lib/dapp/connections.ts';
 	import {
 		measureDeviceStorage,
 		STORAGE_ITEM_IDS,
 		type DeviceStorageReport
-	} from '$lib/services/device-storage';
-	import { ERASE_HELD } from '$lib/services/erase-device';
+	} from '#lib/services/device-storage.ts';
+	import { ERASE_HELD } from '#lib/services/erase-device.ts';
 	import {
 		addNetworkEntered,
 		type EraseFailure,
@@ -120,41 +120,41 @@
 		walletKeysModel,
 		withLivePreferences,
 		withLivePreferencesDesktop
-	} from '$lib/settings/live';
-	import { preferences, TEXT_SCALE_LEVELS } from '$lib/services/preferences.svelte';
-	import { intents } from '$lib/intents/index.svelte';
-	import { screenDesk } from '$lib/flows/screen-desk.svelte';
-	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
-	import type { IntentPreference } from '$lib/core/generated/IntentPreference';
-	import { loadCurrencyCodes } from '$lib/settings/core/currency-catalog';
-	import { negotiateLanguages, SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
+	} from '#lib/settings/live.ts';
+	import { preferences, TEXT_SCALE_LEVELS } from '#lib/services/preferences.svelte.ts';
+	import { intents } from '#lib/intents/index.svelte.ts';
+	import { screenDesk } from '#lib/flows/screen-desk.svelte.ts';
+	import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
+	import type { IntentPreference } from '#lib/core/generated/IntentPreference.ts';
+	import { loadCurrencyCodes } from '#lib/settings/core/currency-catalog.ts';
+	import { negotiateLanguages, SUPPORTED_LOCALES, type Locale } from '#lib/i18n/locales.ts';
 	import {
 		AREA_OTHER,
 		buildBugReport,
 		readWorkerFailureLines,
 		type DeviceFacts
-	} from '$lib/services/bug-report';
-	import { reportSend } from '$lib/settings/report-send.svelte';
-	import { deviceFacts as currentDeviceFacts } from '$lib/settings/device-facts';
-	import { fileReport } from '$lib/settings/file-report';
-	import type { SettingsPrefEvent } from '$lib/settings/pref-events';
-	import { LOCALE_ENDONYMS } from '$lib/settings/fixtures';
-	import type { SettingsNetEvent } from '$lib/settings/net-events';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
-	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
-	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import type { LiveSpace } from '$lib/settings/live';
+	} from '#lib/services/bug-report.ts';
+	import { reportSend } from '#lib/settings/report-send.svelte.ts';
+	import { deviceFacts as currentDeviceFacts } from '#lib/settings/device-facts.ts';
+	import { fileReport } from '#lib/settings/file-report.ts';
+	import type { SettingsPrefEvent } from '#lib/settings/pref-events.ts';
+	import { LOCALE_ENDONYMS } from '#lib/settings/fixtures.ts';
+	import type { SettingsNetEvent } from '#lib/settings/net-events.ts';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+	import { shortenAddress, type WalletIdentity } from '#lib/wallet/identity.ts';
+	import { WEB_DESTINATIONS } from '#lib/wallet/destinations.ts';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import type { LiveSpace } from '#lib/settings/live.ts';
 	import type { PageProps } from './$types';
-	import { shownAddress, shownIdentity } from '$lib/multisig/core/shown';
-	import { multisigName } from '$lib/multisig/core/display';
-	import { multisig } from '$lib/multisig/core/store.svelte';
-	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
-	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
-	import MultisigSettings from '$lib/multisig/ui/MultisigSettings.svelte';
-	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import { shownAddress, shownIdentity } from '#lib/multisig/core/shown.ts';
+	import { multisigName } from '#lib/multisig/core/display.ts';
+	import { multisig } from '#lib/multisig/core/store.svelte.ts';
+	import MultisigHost from '#lib/multisig/ui/MultisigHost.svelte';
+	import MultisigRows from '#lib/multisig/ui/MultisigRows.svelte';
+	import MultisigSettings from '#lib/multisig/ui/MultisigSettings.svelte';
+	import { multisigUi } from '#lib/multisig/core/ui.svelte.ts';
+	import Button from '#lib/ui/Button.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -814,14 +814,16 @@
 	// --- The AI agent (spec 103) ----------------------------------------------
 	//
 	// Web only: its row and nav entry are added here, not drawn by the shared
-	// fixtures. The connection lives in `$lib/agent/bridge.svelte`, loaded on
+	// fixtures. The connection lives in `#lib/agent/bridge.svelte.ts`, loaded on
 	// first use so a wallet that never turns the agent on never carries it.
 
-	let agentBridge = $state<(typeof import('$lib/agent/bridge.svelte'))['agentBridge'] | null>(null);
+	let agentBridge = $state<(typeof import('#lib/agent/bridge.svelte.ts'))['agentBridge'] | null>(
+		null
+	);
 
 	/** Dial, redial or hang up to match what Settings now says. */
 	function syncAgent(): void {
-		void import('$lib/agent/bridge.svelte').then((bridge) => {
+		void import('#lib/agent/bridge.svelte.ts').then((bridge) => {
 			agentBridge = bridge.agentBridge;
 			bridge.agentBridge.sync();
 		});
@@ -1371,7 +1373,7 @@
 	// has not ruled yet, and bouncing on a non-answer would throw a reloading
 	// person back to Welcome mid-boot.
 	$effect(() => {
-		if (view.allowed_route === 'onboarding') void goto(welcome, { replaceState: true });
+		if (view.allowed_route === 'onboarding') void goto(welcome, { replace: true });
 	});
 
 	/**

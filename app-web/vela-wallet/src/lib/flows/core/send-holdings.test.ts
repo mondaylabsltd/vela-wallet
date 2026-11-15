@@ -4,9 +4,9 @@
 // machine for ONE forced re-read and answers from the NEXT round, whatever it
 // holds; only a second round that reaches nothing is the failure.
 import { describe, expect, it, vi } from 'vitest';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { SendToken } from '$lib/core/generated/SendToken';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
 import { answerHoldings, readHoldings, type HoldingsSource } from './send-holdings';
 
 const ACCOUNT = '0x' + 'aa'.repeat(20);
@@ -208,8 +208,8 @@ describe('r22-7: a network that does not answer keeps its last-known rows in the
 
 	/** The real `balance_dashboard`: Arc's rows restored, then a round in which Arc refused. */
 	async function arcRefused(): Promise<{ view: BalanceView; stamp: number | null }> {
-		await import('$lib/i18n/wasm-init.server');
-		const { BalanceDashboardCore } = await import('$lib/core/client');
+		await import('#lib/i18n/wasm-init.server.ts');
+		const { BalanceDashboardCore } = await import('#lib/core/client.ts');
 		const core = new BalanceDashboardCore();
 		let out = JSON.parse(
 			core.dispatch(JSON.stringify({ type: 'account_changed', address: ACCOUNT }))

@@ -9,8 +9,8 @@
 	 * triangle for a check because a green triangle reads as an alarm.
 	 */
 	import type { CalloutModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		callout: CalloutModel;

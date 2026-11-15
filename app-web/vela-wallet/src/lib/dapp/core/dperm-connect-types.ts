@@ -11,9 +11,9 @@
  * and what the dApp is answered with.
  */
 
-import type { DpermGrant } from '$lib/core/generated/DpermGrant';
-import type { DpermRejectReason } from '$lib/core/generated/DpermRejectReason';
-import type { DpermRespondPayload } from '$lib/core/generated/DpermRespondPayload';
+import type { DpermGrant } from '#lib/core/generated/DpermGrant.ts';
+import type { DpermRejectReason } from '#lib/core/generated/DpermRejectReason.ts';
+import type { DpermRespondPayload } from '#lib/core/generated/DpermRespondPayload.ts';
 
 /**
  * Everything the core needs to author one popup connection. Every field is a

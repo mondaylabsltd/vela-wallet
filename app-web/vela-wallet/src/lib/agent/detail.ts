@@ -8,9 +8,9 @@
  * the wallet a switch leaves and the one it goes to, a site's networks); the
  * words are the locale's, resolved on the server (`AgentMessages`).
  */
-import type { IntentAction } from '$lib/core/generated/IntentAction';
-import type { IntentPreference } from '$lib/core/generated/IntentPreference';
-import { fill } from '$lib/wallet/messages';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+import type { IntentPreference } from '#lib/core/generated/IntentPreference.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import type { AgentMessages } from './messages';
 
 export type DetailContext = {

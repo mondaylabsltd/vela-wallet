@@ -4,15 +4,15 @@
  * does not have stops the send, "Add this network" asks the shell to add it,
  * and what came of it is said — in the corpus's words, in every language.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { SendCore } from '$lib/core/client';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendOperation } from '$lib/core/generated/SendOperation';
-import type { SendShellResult } from '$lib/core/generated/SendShellResult';
-import type { SendView } from '$lib/core/generated/SendView';
-import { rawResolve, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { SendCore } from '#lib/core/client.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendOperation } from '#lib/core/generated/SendOperation.ts';
+import type { SendShellResult } from '#lib/core/generated/SendShellResult.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { rawResolve, resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { liveSendLock } from './live-send-lock';
 
 const m = resolveWalletFlowMessages('en');

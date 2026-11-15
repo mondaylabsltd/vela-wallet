@@ -24,12 +24,12 @@
  * gate is the RUNTIME dev gate, because the web e2e runs the production
  * artifact (D18).
  */
-import type { Account } from '$lib/core/generated/Account';
-import { loadCore } from '$lib/core/client';
-import { restoreSites, setSitesAside } from '$lib/dapp/space-sites';
-import { setPasskeyOverride, relyingPartyId } from '$lib/onboarding/core/passkey';
-import { STORAGE_KEYS } from '$lib/onboarding/core/storage';
-import { getItem, setItem } from '$lib/services/storage';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { loadCore } from '#lib/core/client.ts';
+import { restoreSites, setSitesAside } from '#lib/dapp/space-sites.ts';
+import { setPasskeyOverride, relyingPartyId } from '#lib/onboarding/core/passkey.ts';
+import { STORAGE_KEYS } from '#lib/onboarding/core/storage.ts';
+import { getItem, setItem } from '#lib/services/storage.ts';
 import { PARALLEL_FLAG_KEY, setParallelActive } from './parallel-flag.svelte';
 import {
 	buildMockAssertion,

@@ -11,7 +11,7 @@
  * addresses must never hold real funds). Phase 3's fixture module derives
  * these same three keys from its seeds and asserts against these constants.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { computeAddress, computeAddressMulti, computeSafeAddressMulti } from './kernels';
 

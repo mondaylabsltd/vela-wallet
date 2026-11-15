@@ -14,9 +14,9 @@
  * whether the core asks again, and how many failed runs a recovery took.
  * Never a host, never a value.
  */
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import { countPanelFailure } from '$lib/services/bug-report';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import { countPanelFailure } from '#lib/services/bug-report.ts';
 
 /**
  * A fee failure as a log word and a counter class (spec 082 RJ12, G61):

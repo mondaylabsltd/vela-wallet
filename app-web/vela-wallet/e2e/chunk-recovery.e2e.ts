@@ -207,16 +207,19 @@ test('the build moved: the tab reloads ONCE — and does not loop when what come
 	expect(documents.of('/en/wallet')).toBe(3);
 
 	// However often it fails from here on: the person can keep using the page.
+	// SvelteKit already knows the build moved (`updated.current`), so
+	// `updated.check()` answers without asking the server again — the decision
+	// is taken within the failure's own microtasks, before `ranOn`'s frames.
+	const asked = version.answered();
 	for (let again = 0; again < 3; again++) {
-		const asked = version.answered();
 		await page.evaluate(() => {
 			const failure = new Event('vite:preloadError', { cancelable: true });
 			Object.assign(failure, { payload: new Error('error loading dynamically imported module') });
 			window.dispatchEvent(failure);
 		});
-		await expect.poll(version.answered, { timeout: 30_000 }).toBeGreaterThan(asked);
 		await ranOn(page);
 	}
+	expect(version.answered()).toBe(asked);
 	expect(documents.of('/en/wallet')).toBe(3);
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 });

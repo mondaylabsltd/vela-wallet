@@ -13,12 +13,12 @@
  * once it has landed. Reads, a replay and a local write; no passkey anywhere.
  */
 
-import * as Storage from '$lib/onboarding/core/storage';
-import * as Registry from '$lib/onboarding/core/registry';
-import * as Passkey from '$lib/onboarding/core/passkey';
-import { publish } from '$lib/onboarding/core/publish';
-import { isProductionWriteRefused } from '$lib/services/production-guard';
-import { trustedSignerRegistryRpId } from '$lib/core/kernels';
+import * as Storage from '#lib/onboarding/core/storage.ts';
+import * as Registry from '#lib/onboarding/core/registry.ts';
+import * as Passkey from '#lib/onboarding/core/passkey.ts';
+import { publish } from '#lib/onboarding/core/publish.ts';
+import { isProductionWriteRefused } from '#lib/services/production-guard.ts';
+import { trustedSignerRegistryRpId } from '#lib/core/kernels.ts';
 import type { PendingPublish } from '../generated/PendingPublish';
 import type { SessionOperation } from '../generated/SessionOperation';
 import type { SessionShellResult } from '../generated/SessionShellResult';

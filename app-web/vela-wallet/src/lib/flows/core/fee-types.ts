@@ -9,9 +9,9 @@
  * service graph into the native bundle.
  */
 
-import type { FeeOperation } from '$lib/core/generated/FeeOperation';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SessionOptions } from '$lib/core/types';
+import type { FeeOperation } from '#lib/core/generated/FeeOperation.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type FeeEffect = { id: number; operation: FeeOperation };

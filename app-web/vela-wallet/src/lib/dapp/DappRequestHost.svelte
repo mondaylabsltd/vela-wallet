@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { accountName } from '$lib/multisig/core/account-name';
-	import { multisig } from '$lib/multisig/core/store.svelte';
-	import { multisigAccountsForExt, multisigAsAccount } from '$lib/multisig/core/ext';
-	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import { holdDappRequest, type DappHold } from '$lib/multisig/shell/dapp-requests.svelte';
-	import type { MultisigDappAnswer } from '$lib/multisig/generated/MultisigDappAnswer';
-	import type { MultisigHeldRequest } from '$lib/multisig/generated/MultisigHeldRequest';
+	import { accountName } from '#lib/multisig/core/account-name.ts';
+	import { multisig } from '#lib/multisig/core/store.svelte.ts';
+	import { multisigAccountsForExt, multisigAsAccount } from '#lib/multisig/core/ext.ts';
+	import { multisigUi } from '#lib/multisig/core/ui.svelte.ts';
+	import { holdDappRequest, type DappHold } from '#lib/multisig/shell/dapp-requests.svelte.ts';
+	import type { MultisigDappAnswer } from '#lib/multisig/generated/MultisigDappAnswer.ts';
+	import type { MultisigHeldRequest } from '#lib/multisig/generated/MultisigHeldRequest.ts';
 
 	/**
 	 * One dApp request, from arrival to answer — wherever it is answered.
@@ -35,44 +35,52 @@
 	 * machine that feeds it.
 	 */
 	import { onMount } from 'svelte';
-	import { session } from '$lib/session/core/session.svelte';
-	import { hostLabel } from '$lib/dapp/host';
-	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
-	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
-	import { getOriginChain, originHasOwnChain, watchStartChain } from '$lib/dapp/grants';
-	import { balanceView, rereadHoldings } from '$lib/wallet/core/balance-resident';
-	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
-	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
-	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import ConsentFacts from '$lib/dapp/ConsentFacts.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { shortenAddress } from '$lib/wallet/identity';
-	import { chainName } from '$lib/services/networks';
-	import { chainLogoURL } from '$lib/flows/marks';
-	import type { RequestMessages } from '$lib/dapp/messages';
-	import { multisigRefusalWords } from '$lib/dapp/multisig-refusal';
-	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
-	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
-	import { oneSurface } from '$lib/extension/one-surface.svelte';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { hostLabel } from '#lib/dapp/host.ts';
+	import { publishExtSnapshot } from '#lib/dapp/core/ext-cache.ts';
+	import {
+		accountLivesOn,
+		publishExtChains,
+		setExtAccountChains
+	} from '#lib/dapp/core/ext-chains.ts';
+	import { getOriginChain, originHasOwnChain, watchStartChain } from '#lib/dapp/grants.ts';
+	import { balanceView, rereadHoldings } from '#lib/wallet/core/balance-resident.ts';
+	import { approve, evaluate, type RequestStage } from '#lib/dapp/request.ts';
+	import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
+	import {
+		AskerGoneError,
+		type ClaimPhase,
+		type SubmitClaim
+	} from '#lib/signing/core/sign-types.ts';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import ConsentFacts from '#lib/dapp/ConsentFacts.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+	import { shortenAddress } from '#lib/wallet/identity.ts';
+	import { chainName } from '#lib/services/networks.ts';
+	import { chainLogoURL } from '#lib/flows/marks.ts';
+	import type { RequestMessages } from '#lib/dapp/messages.ts';
+	import { multisigRefusalWords } from '#lib/dapp/multisig-refusal.ts';
+	import { panelSurface } from '#lib/dapp/panel-surface.svelte.ts';
+	import { focusOwnWindow, openInBrowserTab } from '#lib/extension/open-tab.ts';
+	import { oneSurface } from '#lib/extension/one-surface.svelte.ts';
 	import {
 		answerNotShown,
 		answerRequest,
 		readRequest,
 		rejectRequest,
 		type ExtensionRequest
-	} from '$lib/dapp/transport';
-	import AddNetworkCard from '$lib/dapp/AddNetworkCard.svelte';
-	import { addNetworkCard } from '$lib/dapp/add-network';
-	import { dappAddChainAsk, dappAddOutcomeError, signRequestTtlMs } from '$lib/core/kernels';
-	import { poolRpcCall } from '$lib/services/rpc-pool';
-	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
-	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
-	import { isSigningMethod } from '$lib/services/dapp-submit';
-	import { track } from '$lib/analytics';
-	import { dappRequestKind } from '$lib/analytics/dapp';
-	import { TX_REQUEST_KINDS } from '$lib/analytics/catalog';
+	} from '#lib/dapp/transport.ts';
+	import AddNetworkCard from '#lib/dapp/AddNetworkCard.svelte';
+	import { addNetworkCard } from '#lib/dapp/add-network.ts';
+	import { dappAddChainAsk, dappAddOutcomeError, signRequestTtlMs } from '#lib/core/kernels.ts';
+	import { poolRpcCall } from '#lib/services/rpc-pool.ts';
+	import { networkAdmin, onDappAddSettled } from '#lib/settings/core/network-admin.svelte.ts';
+	import type { DappAddOutcome } from '#lib/core/generated/DappAddOutcome.ts';
+	import { isSigningMethod } from '#lib/services/dapp-submit.ts';
+	import { track } from '#lib/analytics/index.ts';
+	import { dappRequestKind } from '#lib/analytics/dapp.ts';
+	import { TX_REQUEST_KINDS } from '#lib/analytics/catalog.ts';
 
 	interface Props {
 		/**
@@ -826,8 +834,8 @@
 	async function settleOnClose(rid: string): Promise<void> {
 		try {
 			const [{ popupCloseSettlement }, { dpermRejectMessage }] = await Promise.all([
-				import('$lib/dapp/core/dperm-connect'),
-				import('$lib/dapp/core/dperm-types')
+				import('#lib/dapp/core/dperm-connect.ts'),
+				import('#lib/dapp/core/dperm-types.ts')
 			]);
 			const settlement = popupCloseSettlement();
 			await answerRequest(rid, {

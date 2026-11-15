@@ -1,6 +1,6 @@
 /** Ported from src/__tests__/services/approval-guard.test.ts @ f9bcb278 — vitest; the core is initialised by the server-side wasm init. */
 /* eslint-disable @typescript-eslint/no-explicit-any -- the request fixtures are dynamic JSON, as on Expo */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, test } from 'vitest';
 /**
  * Tests for the approval guard — the "unlimited can never leave the wallet" core.

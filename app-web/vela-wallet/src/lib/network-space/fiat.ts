@@ -7,7 +7,7 @@
  * (`network_space::shows_fiat`, wasm `networkSpaceShowsFiat`); every money
  * surface asks it here.
  */
-import { networkSpaceShowsFiat } from '$lib/core/client';
+import { networkSpaceShowsFiat } from '#lib/core/client.ts';
 import { networkSpace, type NetworkSpace } from './network-space.svelte';
 
 /**

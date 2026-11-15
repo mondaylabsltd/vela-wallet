@@ -12,8 +12,8 @@
 	 * row at a place when the list was drawn can be somebody else's by the
 	 * time the tap is handled — and this is who gets the money.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import ContactPickRow from '../ui/ContactPickRow.svelte';
 	import SearchField from '../ui/SearchField.svelte';
 	import type { ContactPickModel } from '../model';

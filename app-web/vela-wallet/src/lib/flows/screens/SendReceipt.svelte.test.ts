@@ -6,14 +6,14 @@
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { loadCore } from '$lib/core/client';
+import { loadCore } from '#lib/core/client.ts';
 import SendReceipt from './SendReceipt.svelte';
 import type { SendReceiptModel } from '../model';
 
 const OP = '0x' + 'ab'.repeat(32);
 /** When the tracker says the relay sent it (spec 099 R6); `null` — not yet. */
 let relaySentAtMs: number | null = null;
-vi.mock('$lib/wallet/core/tracker-resident', () => ({
+vi.mock('#lib/wallet/core/tracker-resident.ts', () => ({
 	txTrackerView: () => ({
 		entries: [{ user_op_hash: OP, relay_sent_at_ms: relaySentAtMs }]
 	}),

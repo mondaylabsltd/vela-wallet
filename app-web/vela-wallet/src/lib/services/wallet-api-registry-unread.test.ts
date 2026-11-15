@@ -11,7 +11,7 @@
  * are mocked; the read plan is the core's and the orchestration is the real
  * code.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Call3 } from './abi';
 import type { ChainTokensRead } from './chain-tokens';

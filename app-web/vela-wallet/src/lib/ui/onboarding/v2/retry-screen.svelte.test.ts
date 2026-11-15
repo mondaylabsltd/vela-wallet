@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import en from '../../../../../../../assets/i18n/en.json';
 import RetryScreen from './RetryScreen.svelte';
 

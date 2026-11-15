@@ -1,14 +1,14 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
-	/** Filled in by `vite.config.ts` — see `$lib/build/info` (spec 064). */
+	/** Filled in by `vite.config.ts` — see `#lib/build/info.ts` (spec 064). */
 	const __VELA_VERSION__: string;
 	const __VELA_COMMIT__: string;
 	/** `true` in the browser extension's build (`VELA_TARGET=extension`). */
 	const __VELA_EXTENSION__: boolean;
 	/**
 	 * `VELA_ALLOW_PRODUCTION_WRITES` as the dev server or the package build
-	 * was started with (§28, `$lib/services/production-guard.ts`); `''` unset.
+	 * was started with (§28, `#lib/services/production-guard.ts`); `''` unset.
 	 */
 	const __VELA_ALLOW_PRODUCTION_WRITES__: string;
 	/**
@@ -29,7 +29,7 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		/** The history entries the app's own Back stacks write (`$lib/ui/history`). */
+		/** The history entries the app's own Back stacks write (`#lib/ui/history.ts`). */
 		interface PageState {
 			velaFlow?: number;
 			velaContacts?: string;

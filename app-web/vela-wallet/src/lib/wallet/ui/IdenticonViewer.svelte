@@ -13,12 +13,12 @@
 	 * Shape follows `PromptSheet`: bottom sheet below the desktop breakpoint,
 	 * centred card above it.
 	 */
-	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
+	import { receiveIdentity } from '#lib/onboarding/core/receive-identity.svelte.ts';
 	import { MediaQuery } from 'svelte/reactivity';
 	import BottomSheet from './BottomSheet.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import Identicon from './Identicon.svelte';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
 	import type { WalletMessages } from '../messages';
 
 	interface Props {

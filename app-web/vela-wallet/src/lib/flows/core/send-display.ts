@@ -24,9 +24,9 @@
  * The page sends the result at `open`, and again as `display_changed` whenever
  * it changes, so the pair landing opens the toggle in the right money.
  */
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { NetworkSpace } from '$lib/core/generated/NetworkSpace';
-import type { SendDisplayContext } from '$lib/core/generated/SendDisplayContext';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { NetworkSpace } from '#lib/core/generated/NetworkSpace.ts';
+import type { SendDisplayContext } from '#lib/core/generated/SendDisplayContext.ts';
 
 /** Every currency the wallet lists is entered to two places here, as before. */
 const FIAT_DECIMALS = 2;

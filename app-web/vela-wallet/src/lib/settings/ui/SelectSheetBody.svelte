@@ -10,8 +10,8 @@
 	 * A row matches on its code, its label or its caption ("yen" finds JPY).
 	 */
 	import type { SelectSheetModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import SelectRow from './SelectRow.svelte';
 
 	interface Props {

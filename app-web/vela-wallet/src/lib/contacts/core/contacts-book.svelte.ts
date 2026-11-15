@@ -18,9 +18,9 @@
  * Every consumer reads `view` and sends its events through `dispatch`; no
  * logic lives here.
  */
-import { loadCore } from '$lib/core/client';
-import type { ContactEvent } from '$lib/core/generated/ContactEvent';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
+import { loadCore } from '#lib/core/client.ts';
+import type { ContactEvent } from '#lib/core/generated/ContactEvent.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
 import { createContactsSession, type ContactsSession } from './contacts';
 import { announceContactsChanged, onContactsChangedElsewhere } from './contacts-sync';
 

@@ -20,8 +20,8 @@
 	 * what is under it (the hand-off card's Open).
 	 */
 	import type { IntegrityLineModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	let { line }: { line: IntegrityLineModel } = $props();
 

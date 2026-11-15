@@ -18,9 +18,9 @@
 	 * inside, and focus goes back to what opened it on close.
 	 */
 	import type { Snippet } from 'svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { dialogPop, scrimFade } from '$lib/ui/dialog-motion';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { dialogPop, scrimFade } from '#lib/ui/dialog-motion.ts';
 
 	interface Props {
 		title: string;

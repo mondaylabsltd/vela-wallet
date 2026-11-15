@@ -1,5 +1,5 @@
 <script lang="ts">
-	import BrandMark from '$lib/ui/BrandMark.svelte';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
 
 	interface Props {
 		title: string;

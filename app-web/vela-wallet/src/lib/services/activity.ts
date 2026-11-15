@@ -14,8 +14,8 @@
  * disagree — `STABLE_SYMBOLS` is mirrored verbatim in `activity_feed.rs`.
  */
 
-import { incomingScanPlan } from '$lib/core/kernels';
-import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
+import { incomingScanPlan } from '#lib/core/kernels.ts';
+import type { TrustScanFacts } from '#lib/core/generated/TrustScanFacts.ts';
 import { fromBaseUnits } from './eip681';
 import { fetchIncomingTransfers } from './incoming-transfers';
 import { getCustomChainIdsSync, nativeSymbol, spaceNetworksSync } from './networks';
@@ -23,7 +23,7 @@ import { watchNativeBalances } from './native-watch';
 import { mergeTransactions } from './records';
 import { resolveTokenMetadata } from './token-metadata';
 import { tokenChainId, type APIToken } from './tokens-model';
-import { tokenLogoURLs } from '$lib/flows/marks';
+import { tokenLogoURLs } from '#lib/flows/marks.ts';
 import type { IncomingTransfer } from './transfer-types';
 import type { LocalTransaction } from './transactions-model';
 import { fetchTokens } from './wallet-api';

@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import manifest from '../../../extension/manifest.json';
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { buildDesktopState } from '$lib/settings/fixtures';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { buildDesktopState } from '#lib/settings/fixtures.ts';
 import { BUILD_COMMIT, BUILD_VERSION, MOCK_COMMIT, MOCK_VERSION } from './info';
 
 /**

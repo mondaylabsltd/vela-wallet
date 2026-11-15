@@ -9,10 +9,10 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import { preferences } from '$lib/services/preferences.svelte';
-import AllowanceEditor from '$lib/signing/ui/AllowanceEditor.svelte';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
+import { preferences } from '#lib/services/preferences.svelte.ts';
+import AllowanceEditor from '#lib/signing/ui/AllowanceEditor.svelte';
 import AmountInput from './ui/AmountInput.svelte';
 import RecipientCard from './ui/RecipientCard.svelte';
 

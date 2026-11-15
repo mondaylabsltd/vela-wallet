@@ -4,9 +4,9 @@
  * punctuation.
  */
 import { describe, expect, it } from 'vitest';
-import type { IntentAction } from '$lib/core/generated/IntentAction';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
 import { approvalDetail, approvalMessage, type DetailContext } from './detail';
-import { resolveAgentMessages } from '$lib/i18n/engine.server';
+import { resolveAgentMessages } from '#lib/i18n/engine.server.ts';
 
 const SAFE = '0x2222222222222222222222222222222222222222';
 

@@ -7,8 +7,8 @@
  * chain and the mailbox.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { resolveMultisigMessages } from '$lib/i18n/engine.server';
-import { shortenAddress } from '$lib/wallet/identity';
+import { resolveMultisigMessages } from '#lib/i18n/engine.server.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const A = '0x1111111111111111111111111111111111111111';
@@ -41,12 +41,12 @@ vi.mock('./proposals.svelte', () => ({
 }));
 vi.mock('./names.svelte', () => ({ names: { label: (a: string) => shortenAddress(a) } }));
 vi.mock('./reading', () => ({ readTx: () => null, asReview: () => null }));
-vi.mock('$lib/onboarding/core/storage', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/onboarding/core/storage')>()),
+vi.mock('#lib/onboarding/core/storage.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/onboarding/core/storage.ts')>()),
 	loadAccounts: () => []
 }));
 // The fake token answers `symbol()` "USDC" and `decimals()` 6.
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	poolRpcCall: async (_method: string, params: [{ data: string }]) => ({
 		result:
 			params[0].data === '0x95d89b41'

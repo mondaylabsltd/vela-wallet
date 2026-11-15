@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
 	import { identiconViewer } from '../identicon-viewer.svelte';
-	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
-	import { session } from '$lib/session/core/session.svelte';
+	import { receiveIdentity } from '#lib/onboarding/core/receive-identity.svelte.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
 	import type { WalletHeaderModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';

@@ -5,8 +5,8 @@
 	 * one tap away. Picking selects — it never acts: the sheet's own button
 	 * does (r4b-8).
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		label: string;

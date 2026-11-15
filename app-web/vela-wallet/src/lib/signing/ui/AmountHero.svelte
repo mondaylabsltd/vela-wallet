@@ -1,5 +1,5 @@
 <script lang="ts">
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import type { AmountLine } from '../model';
 
 	interface Props {

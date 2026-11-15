@@ -1,4 +1,4 @@
-import { negotiate } from '$lib/i18n/locales';
+import { negotiate } from '#lib/i18n/locales.ts';
 
 /**
  * `/` — the only runtime route (contracts/i18n-ssr.md): negotiate

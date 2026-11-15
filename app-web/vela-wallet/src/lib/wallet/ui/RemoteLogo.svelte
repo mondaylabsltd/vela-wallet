@@ -13,7 +13,7 @@
 	 * The parent must be `position: relative`.
 	 */
 	import { onDestroy } from 'svelte';
-	import { hasFailed, markFailed, probeMiss } from '$lib/services/logo-cache';
+	import { hasFailed, markFailed, probeMiss } from '#lib/services/logo-cache.ts';
 
 	interface Props {
 		urls?: string[];

@@ -1,4 +1,4 @@
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** The vendored client, as far as the token goes: what `connect` was given, and its events. */
@@ -8,7 +8,7 @@ const vendored = vi.hoisted(() => ({
 		connection: EventTarget & { state: string; room: { relay: string } };
 	}
 }));
-vi.mock('$lib/vendor/peerconnect/index.js', () => ({
+vi.mock('#lib/vendor/peerconnect/index.js', () => ({
 	connect: (room: { relay: string }, options: { token?: () => Promise<string> } = {}) => {
 		const connection = Object.assign(new EventTarget(), { state: 'offline', room });
 		vendored.last = { token: options.token, connection };

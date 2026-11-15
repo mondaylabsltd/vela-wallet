@@ -9,7 +9,7 @@
 	 * this is a page waiting, not a fixture wallet, and when the core says
 	 * there is no wallet here it sends the person to Welcome from this.
 	 */
-	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
+	import SkeletonRow from '#lib/wallet/ui/SkeletonRow.svelte';
 
 	interface Props {
 		/** The wallet home's hero figure under the header row. */

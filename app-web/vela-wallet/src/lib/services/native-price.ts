@@ -29,7 +29,7 @@ import {
 	bestNativeDexPrice as coreBestNativeDexPrice,
 	chooseNativePrice as coreChooseNativePrice,
 	peggedNativeUsd as corePeggedNativeUsd
-} from '$lib/core/client';
+} from '#lib/core/client.ts';
 
 /** Quote-token decimals when the `decimals()` read failed — USDC's 6. */
 export const DEFAULT_QUOTE_DECIMALS = 6;

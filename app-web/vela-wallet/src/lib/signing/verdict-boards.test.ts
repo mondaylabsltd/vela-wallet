@@ -5,11 +5,11 @@
  * gave for the board's reply, built by the live sheet's own builder; and an
  * unverified token's figure — the site's number — is nowhere on any board.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
-import { fill } from '$lib/wallet/messages';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES, type Locale } from '#lib/i18n/locales.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import { buildSigningState } from './fixtures';
 import type { Block, SigningModel } from './model';
 import {

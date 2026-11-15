@@ -10,10 +10,10 @@
  * else.
  */
 import { describe, expect, it } from 'vitest';
-import '$lib/i18n/wasm-init.server';
-import { FeeTierPrefCore } from '$lib/core/client';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
+import '#lib/i18n/wasm-init.server.ts';
+import { FeeTierPrefCore } from '#lib/core/client.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTierPrefView } from '#lib/core/generated/FeeTierPrefView.ts';
 import { offeredTier, speedControlModel, type SpeedWords } from './speed-control';
 
 const WORDS: SpeedWords = {

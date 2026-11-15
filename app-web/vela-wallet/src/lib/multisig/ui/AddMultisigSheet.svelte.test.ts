@@ -10,8 +10,8 @@
 import { tick } from 'svelte';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
 import type { MultisigMessages } from '../messages';
 
 const REFUSED = '0x2f53cc750594bb97c21bf3c18a4837bb5ad911f6';
@@ -99,7 +99,7 @@ const machine = vi.hoisted(() => ({
 		throw new Error(`not asked here: ${event.type}`);
 	}
 }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('#lib/services/networks.ts', () => ({
 	spaceNetworksSync: () => [
 		{ chainId: 11155111, displayName: 'Sepolia' },
 		{ chainId: 84532, displayName: 'Base Sepolia' },
@@ -110,8 +110,8 @@ vi.mock('$lib/services/networks', () => ({
 		[11155111, 84532, 5042002].includes(id) ? { chainId: id } : null,
 	networkRank: (id: number) => [11155111, 84532, 5042002].indexOf(id)
 }));
-vi.mock('$lib/core/kernels', () => ({ addressEntry: () => 'valid' }));
-vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { view: { tokens: [] } } }));
+vi.mock('#lib/core/kernels', () => ({ addressEntry: () => 'valid' }));
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({ balance: { view: { tokens: [] } } }));
 vi.mock('$app/navigation', () => ({ goto: async () => {} }));
 vi.mock('../core/activity.svelte', () => ({
 	indexName: async () => null,
@@ -194,7 +194,7 @@ vi.mock('../core/store.svelte', async () => {
 		}
 	};
 });
-vi.mock('$lib/wallet/identicon', () => ({
+vi.mock('#lib/wallet/identicon.ts', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
 vi.mock('../core/names.svelte', () => ({

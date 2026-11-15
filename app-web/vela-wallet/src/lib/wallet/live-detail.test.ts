@@ -4,16 +4,16 @@
  * BNB and USDT, which is what both columns showed until now.
  */
 import { describe, expect, it } from 'vitest';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
-import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
-import { buildSigningRecord } from '$lib/services/dapp-history';
-import { dappRequestDisplay } from '$lib/core/kernels';
-import type { TxTechnicalRow } from '$lib/flows/model';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { resolveWalletFlowMessages, resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import { buildDesktopFlowState, buildFlowState } from '#lib/flows/fixtures.ts';
+import { buildSigningRecord } from '#lib/services/dapp-history.ts';
+import { dappRequestDisplay } from '#lib/core/kernels.ts';
+import type { TxTechnicalRow } from '#lib/flows/model.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { withFigureMaskable } from './testing/figure-maskable';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';

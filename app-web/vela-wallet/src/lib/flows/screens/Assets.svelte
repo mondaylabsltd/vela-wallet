@@ -7,11 +7,11 @@
 	 * yet" or "you have, and we can't see it". The guidance card answers the
 	 * second, because the person in that case is the one who needs help.
 	 */
-	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
-	import EmptyState from '$lib/wallet/ui/EmptyState.svelte';
-	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import AssetRow from '#lib/wallet/ui/AssetRow.svelte';
+	import EmptyState from '#lib/wallet/ui/EmptyState.svelte';
+	import SkeletonRow from '#lib/wallet/ui/SkeletonRow.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import SearchField from '../ui/SearchField.svelte';
 	import HintCard from '../ui/HintCard.svelte';
 	import type { AssetsModel } from '../model';

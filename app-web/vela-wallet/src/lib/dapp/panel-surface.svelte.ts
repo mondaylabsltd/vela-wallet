@@ -40,7 +40,7 @@
  * wallet, where it is answered (G55).
  */
 import type { AnsweredOp, ExtensionRequest } from './transport';
-import type { SessionRoute } from '$lib/core/generated/SessionRoute';
+import type { SessionRoute } from '#lib/core/generated/SessionRoute.ts';
 
 /**
  * The worker's names (`extension/lib/protocol.js`), declared here because the

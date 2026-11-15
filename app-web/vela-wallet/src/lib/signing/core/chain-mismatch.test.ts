@@ -11,12 +11,12 @@
  * real executor, so the words the page reads are pinned to the core's
  * `CHAIN_MISMATCH_MESSAGE`.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
 const submit = vi.hoisted(() => ({ calls: 0 }));
-vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/services/dapp-submit')>();
+vi.mock('#lib/services/dapp-submit.ts', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('#lib/services/dapp-submit.ts')>();
 	return {
 		...actual,
 		handleDAppRequest: async () => {
@@ -26,7 +26,7 @@ vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
 	};
 });
 
-import type { SignView } from '$lib/core/generated/SignView';
+import type { SignView } from '#lib/core/generated/SignView.ts';
 import { createSignRequestSession } from './sign-session';
 import { CHAIN_MISMATCH_MESSAGE, signErrorMessage, type SignShellPorts } from './sign-types';
 

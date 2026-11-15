@@ -5,7 +5,7 @@
  * words, same three states — so these tests are about the states being the
  * SEND's, not about a second design.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import {
 	handoffLands,
@@ -22,8 +22,8 @@ import {
 	withSheetRefusal,
 	type DappReceiptCopy
 } from './dapp-receipt';
-import { ringProgress } from '$lib/flows/ui/ring';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
+import { ringProgress } from '#lib/flows/ui/ring.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
 
 const copy: DappReceiptCopy = {
 	confirming: 'Confirming…',

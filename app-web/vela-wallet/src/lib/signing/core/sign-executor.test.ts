@@ -13,7 +13,7 @@
  * relay's words or the core's fixed sentence; a landed revert is not
  * "dropped, try again".
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
 const submit = vi.hoisted(() => ({
@@ -21,8 +21,8 @@ const submit = vi.hoisted(() => ({
 	args: [] as unknown[]
 }));
 
-vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/services/dapp-submit')>();
+vi.mock('#lib/services/dapp-submit.ts', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('#lib/services/dapp-submit.ts')>();
 	return {
 		...actual,
 		handleDAppRequest: (...args: unknown[]) => {
@@ -37,8 +37,8 @@ const store = vi.hoisted(() => ({
 	deleteTransaction: vi.fn(async () => {}),
 	updateTransaction: vi.fn(async () => {})
 }));
-vi.mock('$lib/services/records', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/records')>()),
+vi.mock('#lib/services/records.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/records.ts')>()),
 	saveTransaction: store.saveTransaction,
 	deleteTransaction: store.deleteTransaction,
 	updateTransaction: store.updateTransaction
@@ -48,15 +48,15 @@ import {
 	userOpExpiredDetail,
 	userOpNotSentDetail,
 	userOpWriteAheadWaitMs
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import {
 	DAppReceiptPendingError,
 	DAppRevertedError,
 	guardedSign,
 	type DAppSubmitHooks
-} from '$lib/services/dapp-submit';
-import { UserOpNotSentError } from '$lib/services/safe-transaction';
-import { PageSignFailedError, VenueBlockedError } from '$lib/signing/sign-challenge';
+} from '#lib/services/dapp-submit.ts';
+import { UserOpNotSentError } from '#lib/services/safe-transaction.ts';
+import { PageSignFailedError, VenueBlockedError } from '#lib/signing/sign-challenge.ts';
 import { createSignExecutor } from './sign-executor';
 import {
 	AskerGoneError,

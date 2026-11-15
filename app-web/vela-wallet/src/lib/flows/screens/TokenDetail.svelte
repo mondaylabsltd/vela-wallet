@@ -5,11 +5,11 @@
 	 * Receive and Send sit directly under the balance because they are the two
 	 * reasons anyone opens this sheet. Everything below them is reference.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import ActivityRow from '$lib/wallet/ui/ActivityRow.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import ActivityRow from '#lib/wallet/ui/ActivityRow.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import FactRow from '../ui/FactRow.svelte';
-	import { copyText } from '$lib/services/clipboard';
+	import { copyText } from '#lib/services/clipboard.ts';
 	import type { TokenDetailModel } from '../model';
 
 	interface Props {

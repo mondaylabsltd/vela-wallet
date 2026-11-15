@@ -17,8 +17,8 @@
  * `wallet_addEthereumChain` sheet — read this one function, so neither decides
  * the line or the button from `phase` / `compatible` any more. Pure.
  */
-import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
-import type { NetWizardView } from '$lib/core/generated/NetWizardView';
+import type { NetCompatibility } from '#lib/core/generated/NetCompatibility.ts';
+import type { NetWizardView } from '#lib/core/generated/NetWizardView.ts';
 
 export interface NetRefusal {
 	/** The line under the check; absent when the core named none (or one this build has no words for). */

@@ -42,25 +42,25 @@
  * converted into the result variant that operation answers with.
  */
 
-import { dayStartMs, syncReceivedTransfers } from '$lib/services/activity';
+import { dayStartMs, syncReceivedTransfers } from '#lib/services/activity.ts';
 import { scanUnreadChains } from './token-trust-resident';
-import { hapticSuccess } from '$lib/services/platform';
-import { forgetTransaction, loadTransactions, rewriteReceiveTime } from '$lib/services/records';
-import { poolRpcCall } from '$lib/services/rpc-pool';
-import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import { hapticSuccess } from '#lib/services/platform.ts';
+import { forgetTransaction, loadTransactions, rewriteReceiveTime } from '#lib/services/records.ts';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
+import { resolveRecipientIdentity } from '#lib/services/recipient-identity.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 
-import type { DappAction } from '$lib/core/generated/DappAction';
-import type { DappSummary } from '$lib/core/generated/DappSummary';
-import type { DappToken } from '$lib/core/generated/DappToken';
-import type { FeedShellResult } from '$lib/core/generated/FeedShellResult';
-import type { FeedTxKind } from '$lib/core/generated/FeedTxKind';
-import type { FeedTxRecord } from '$lib/core/generated/FeedTxRecord';
-import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
-import type { TrackFailure } from '$lib/core/generated/TrackFailure';
-import type { TrackMove } from '$lib/core/generated/TrackMove';
-import type { TrackSettlement } from '$lib/core/generated/TrackSettlement';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
+import type { DappAction } from '#lib/core/generated/DappAction.ts';
+import type { DappSummary } from '#lib/core/generated/DappSummary.ts';
+import type { DappToken } from '#lib/core/generated/DappToken.ts';
+import type { FeedShellResult } from '#lib/core/generated/FeedShellResult.ts';
+import type { FeedTxKind } from '#lib/core/generated/FeedTxKind.ts';
+import type { FeedTxRecord } from '#lib/core/generated/FeedTxRecord.ts';
+import type { FeedTxStatus } from '#lib/core/generated/FeedTxStatus.ts';
+import type { TrackFailure } from '#lib/core/generated/TrackFailure.ts';
+import type { TrackMove } from '#lib/core/generated/TrackMove.ts';
+import type { TrackSettlement } from '#lib/core/generated/TrackSettlement.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
 import type { FeedEffect, FeedOwnAccount, FeedRecordSink } from './feed-types';
 
 const KINDS: FeedTxKind[] = [

@@ -4,10 +4,10 @@
  * order its controls send them — open the card, edit the field, leave it.
  * Whether a change held is read back from the ledger's view (`rules.ts`).
  */
-import type { IntentReason } from '$lib/core/generated/IntentReason';
-import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
-import type { NetOverrideField } from '$lib/core/generated/NetOverrideField';
-import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
+import type { IntentReason } from '#lib/core/generated/IntentReason.ts';
+import type { NetEndpointField } from '#lib/core/generated/NetEndpointField.ts';
+import type { NetOverrideField } from '#lib/core/generated/NetOverrideField.ts';
+import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
 
 /** How long the add wizard may take to look a chain up and check it. */
 const CHECK_MS = 45_000;

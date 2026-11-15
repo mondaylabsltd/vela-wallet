@@ -5,10 +5,10 @@
  * figure nobody saw; now the cache is read and no network is, until the
  * wallet home (or the account switcher) shows the balance.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { BalanceDashboardCore } from '$lib/core/client';
-import type { BalanceEvent } from '$lib/core/generated/BalanceEvent';
+import { BalanceDashboardCore } from '#lib/core/client.ts';
+import type { BalanceEvent } from '#lib/core/generated/BalanceEvent.ts';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
 

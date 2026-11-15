@@ -10,7 +10,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import timeline from '../../../../../docs/design/onboarding/launch/launch-timeline.vectors.json';
 import { SCENE } from './generated/scene';
 import LaunchAnimation from './LaunchAnimation.svelte';

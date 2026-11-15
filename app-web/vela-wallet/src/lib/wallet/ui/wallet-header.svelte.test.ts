@@ -5,12 +5,12 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import WalletHeader from './WalletHeader.svelte';
 import type { WalletHeaderModel } from '../model';
 
 const syncPending = vi.hoisted(() => vi.fn());
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { syncPending } }));
+vi.mock('#lib/session/core/session.svelte.ts', () => ({ session: { syncPending } }));
 
 const base: WalletHeaderModel = {
 	name: 'Everyday',

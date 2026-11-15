@@ -29,17 +29,17 @@
 	 * mailbox that way ends it here too.
 	 */
 	import { onMount, untrack } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName } from '$lib/services/networks';
-	import { encodeQr } from '$lib/wallet/qr';
-	import { shortenAddress } from '$lib/wallet/identity';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import type { SigningMessages } from '$lib/signing/messages';
+	import Button from '#lib/ui/Button.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { chainName } from '#lib/services/networks.ts';
+	import { encodeQr } from '#lib/wallet/qr.ts';
+	import { shortenAddress } from '#lib/wallet/identity.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import type { SigningMessages } from '#lib/signing/messages.ts';
 	import type { MultisigMessages } from '../messages';
 	import { asReview, readTx } from '../core/reading';
-	import { nativeSymbol } from '$lib/services/networks';
+	import { nativeSymbol } from '#lib/services/networks.ts';
 	import { memberChanges } from '../core/display';
 	import { reviewTx, type MultisigReviewOut } from '../core/kernel';
 	import ReviewBody from '../external/ReviewBody.svelte';

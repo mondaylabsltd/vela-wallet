@@ -4,11 +4,11 @@
  * chain-only re-check saves what it found through the core — only when the
  * core says to check it first.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/core/client', async (original) => ({
-	...(await original<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (original) => ({
+	...(await original<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {},
 	whenCoreLoaded: async () => {}
 }));
@@ -23,7 +23,7 @@ vi.mock('./registry', () => ({
 	})
 }));
 
-import { accountWithIdentity } from '$lib/core/kernels';
+import { accountWithIdentity } from '#lib/core/kernels.ts';
 import type { Account } from '../generated/Account';
 import { receiveIdentity } from './receive-identity.svelte';
 import { readStoredAccounts, saveAccount, STORAGE_KEYS } from './storage';

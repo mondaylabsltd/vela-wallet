@@ -10,7 +10,7 @@
  *   every way out answers the site: a close before proposing is 4001, the
  *   sheet goes with it; leaving the surface owes the same, at once.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MultisigShellDeps } from './handler';
@@ -32,8 +32,8 @@ vi.mock('../core/store.svelte', () => ({
 		attach: () => {}
 	}
 }));
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts: [] } } }));
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({ contactsBook: { view: null } }));
+vi.mock('#lib/session/core/session.svelte.ts', () => ({ session: { view: { accounts: [] } } }));
 
 const { proposalsHost } = await import('./proposals-host.svelte');
 const { holdDappRequest } = await import('./dapp-requests.svelte');

@@ -8,9 +8,9 @@
 	 * core's two sentences, "Checking on-chain…" while the chain is asked,
 	 * and the way to ask it again.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { ReceiveHeldModel } from '../model';
 
 	interface Props {

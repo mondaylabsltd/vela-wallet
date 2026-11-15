@@ -6,7 +6,7 @@
 	 * book's states but never a form; flagged in the delivery report as a
 	 * Penpot catalog gap to backfill.
 	 */
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
 	import type { ContactDraft, ContactFormCopy } from '../forms';
 	import ContactForm from './ContactForm.svelte';
 

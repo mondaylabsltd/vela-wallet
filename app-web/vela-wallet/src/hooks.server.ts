@@ -1,7 +1,7 @@
-import type { Handle } from '@sveltejs/kit';
-import { toLocale, textDirectionOf, FALLBACK_LOCALE } from '$lib/i18n/locales';
-import { corePreloadTag } from '$lib/core/preload';
-import { withWalletHeaders } from '$lib/security-headers';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { toLocale, textDirectionOf, FALLBACK_LOCALE } from '#lib/i18n/locales.ts';
+import { corePreloadTag } from '#lib/core/preload.ts';
+import { withWalletHeaders } from '#lib/security-headers.ts';
 
 /**
  * Stamp `<html lang dir>` from the route's [locale] param (app.html carries
@@ -13,7 +13,7 @@ import { withWalletHeaders } from '$lib/security-headers';
  * And the core's wasm preload, on the routes that boot the core (perf-3): a
  * URL string, still no wasm in the Worker.
  *
- * And §35's headers (`$lib/security-headers`) on every response the Worker
+ * And §35's headers (`#lib/security-headers.ts`) on every response the Worker
  * renders — the prerendered pages and assets carry them from `_headers`.
  */
 export const handle: Handle = async ({ event, resolve }) => {

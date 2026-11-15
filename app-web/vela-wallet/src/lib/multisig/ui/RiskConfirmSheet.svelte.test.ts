@@ -5,10 +5,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
-vi.mock('$lib/services/networks', () => ({ chainName: (id: number) => `Chain ${id}` }));
+vi.mock('#lib/services/networks', () => ({ chainName: (id: number) => `Chain ${id}` }));
 
 const { default: RiskConfirmSheet } = await import('./RiskConfirmSheet.svelte');
 

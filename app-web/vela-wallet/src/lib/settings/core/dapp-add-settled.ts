@@ -6,7 +6,7 @@
  * importing each other.
  */
 
-import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
+import type { DappAddOutcome } from '#lib/core/generated/DappAddOutcome.ts';
 
 export type DappAddSettledListener = (tab: string, id: string, outcome: DappAddOutcome) => void;
 

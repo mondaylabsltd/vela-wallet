@@ -18,13 +18,13 @@ vi.mock('./display', () => ({
 	localName: () => null,
 	shortenAddress: (address: string) => address.slice(0, 8)
 }));
-vi.mock('$lib/core/kernels', () => ({ checksumAddress: (address: string) => address }));
-vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => '' }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('#lib/core/kernels.ts', () => ({ checksumAddress: (address: string) => address }));
+vi.mock('#lib/flows/marks', () => ({ chainLogoURL: () => '' }));
+vi.mock('#lib/services/networks.ts', () => ({
 	chainName: () => 'Arc Testnet',
 	nativeSymbol: () => 'USDC'
 }));
-vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-arc)' }));
+vi.mock('#lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-arc)' }));
 const { proposals } = await import('./proposals.svelte');
 const { waitingRows } = await import('./activity.svelte');
 vi.spyOn(proposals, 'view', 'get').mockImplementation(

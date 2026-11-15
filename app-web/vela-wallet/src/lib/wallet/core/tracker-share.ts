@@ -23,8 +23,8 @@
  * browser. No rule about an operation lives here: what is tracked and what it
  * means stay the core's.
  */
-import type { TrackEvent } from '$lib/core/generated/TrackEvent';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import type { TrackEvent } from '#lib/core/generated/TrackEvent.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 
 export const TRACKER_CHANNEL = 'vela.tx-tracker';
 export const TRACKER_LOCK = 'vela.tx-tracker';

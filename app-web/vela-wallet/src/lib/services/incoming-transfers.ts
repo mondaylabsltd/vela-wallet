@@ -21,10 +21,10 @@
  *    earlier gate.
  */
 
-import { pollIncoming } from '$lib/wallet/core/token-trust-resident';
+import { pollIncoming } from '#lib/wallet/core/token-trust-resident.ts';
 import type { IncomingTransfer } from './transfer-types';
-import type { TrustIncomingView } from '$lib/core/generated/TrustIncomingView';
-import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
+import type { TrustIncomingView } from '#lib/core/generated/TrustIncomingView.ts';
+import type { TrustScanFacts } from '#lib/core/generated/TrustScanFacts.ts';
 
 /** The judged feed row in the shape `activity.ts` consumes. */
 function toTransfer(row: TrustIncomingView): IncomingTransfer {

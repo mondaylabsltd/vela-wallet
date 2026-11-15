@@ -17,8 +17,8 @@
  * stored keys it reads (`vela.multisigOutbox`, `…Executing`, `…Waiting`,
  * the executions, the member used last).
  */
-import type { JsonWasmCore } from '$lib/core/json-shell';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { JsonWasmCore } from '#lib/core/json-shell.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import type { Executed } from '../core/records';
 import type { MultisigAccount } from '../core/store.svelte';
 import type { MultisigActionState } from '../generated/MultisigActionState';
@@ -30,7 +30,7 @@ import type { OutsideSessionRequest } from '../generated/OutsideSessionRequest';
 import { openOutsideSession } from '../external/signing.svelte';
 import type { MultisigShellDeps } from './handler';
 import type { MultisigMachine } from './machine.svelte';
-import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
+import { refuseBlind } from '#lib/settings/refuse-blind.svelte.ts';
 
 /** How often the multisigs not shown are read again while a page is up (the core's own pace). */
 export const OTHERS_EVERY_MS = 60_000;
@@ -341,7 +341,7 @@ class ProposalsHost {
 				const save =
 					this.#saveRows ??
 					(async (rows: LocalTransaction[]) =>
-						(await import('$lib/services/records')).saveTransactions(rows));
+						(await import('#lib/services/records.ts')).saveTransactions(rows));
 				await save(await activityRows(notice.rows));
 				this.onrecorded?.();
 				return;

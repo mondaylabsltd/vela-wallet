@@ -11,10 +11,10 @@
  * obeying.
  */
 
-import { loadOnboardingCore, SessionCore } from '$lib/onboarding/core/wasm-client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import { clearSignedInWallet, STORAGE_KEYS } from '$lib/onboarding/core/storage';
-import type { EffectLoop } from '$lib/core/effect-loop';
+import { loadOnboardingCore, SessionCore } from '#lib/onboarding/core/wasm-client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import { clearSignedInWallet, STORAGE_KEYS } from '#lib/onboarding/core/storage.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
 import { executeSession, sessionFailure, type SessionEffect } from './executor';
 
 import type { CompletionMode } from '../generated/CompletionMode';

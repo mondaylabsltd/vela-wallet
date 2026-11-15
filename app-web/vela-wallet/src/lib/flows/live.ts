@@ -10,29 +10,29 @@
  * second builder for four strings.
  */
 
-import { maskedAmount } from '$lib/core/client';
-import { showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
-import { feedPositionOf } from '$lib/wallet/live-detail';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { MtokView } from '$lib/core/generated/MtokView';
-import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
-import type { NetWizardView } from '$lib/core/generated/NetWizardView';
-import { NET_HINT_KEYS, NET_STOP_KEYS } from '$lib/settings/messages';
-import { netRefusal, netRpcField, netStopLine, stopIsRefusal } from '$lib/settings/net-refusal';
+import { maskedAmount } from '#lib/core/client.ts';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { feedPositionOf } from '#lib/wallet/live-detail.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { MtokView } from '#lib/core/generated/MtokView.ts';
+import type { NetCompatibility } from '#lib/core/generated/NetCompatibility.ts';
+import type { NetWizardView } from '#lib/core/generated/NetWizardView.ts';
+import { NET_HINT_KEYS, NET_STOP_KEYS } from '#lib/settings/messages.ts';
+import { netRefusal, netRpcField, netStopLine, stopIsRefusal } from '#lib/settings/net-refusal.ts';
 import type { WalletFlowMessages } from './messages';
 import {
 	chainName,
 	explorerAddressURL,
 	spaceNetworksSync,
 	nativeSymbol
-} from '$lib/services/networks';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
-import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
-import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
+} from '#lib/services/networks.ts';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { PaymentRequestEvent } from '#lib/core/generated/PaymentRequestEvent.ts';
+import type { PaymentRequestView } from '#lib/core/generated/PaymentRequestView.ts';
+import type { ReceiveWatchView } from '#lib/core/generated/ReceiveWatchView.ts';
 import {
 	balanceTokenMark,
 	chainLogoURL,
@@ -41,7 +41,7 @@ import {
 	drawnMark,
 	tokenMarkFor
 } from './marks';
-import { chainColor } from '$lib/wallet/fixtures';
+import { chainColor } from '#lib/wallet/fixtures.ts';
 import type {
 	AddTokenTab,
 	FactRowModel,
@@ -51,10 +51,10 @@ import type {
 	TokenDetailModel,
 	TokenMarkModel
 } from './model';
-import type { WalletIdentity } from '$lib/wallet/identity';
-import { shortenAddress } from '$lib/wallet/identity';
-import { fill } from '$lib/wallet/messages';
-import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { encodeQr, encodeShareQr } from '#lib/wallet/qr.ts';
 import {
 	activityUnreadLine,
 	liveActivityGroups,
@@ -66,9 +66,9 @@ import {
 	tokenAmountText,
 	tokenExplorerURL,
 	trimBalance
-} from '$lib/wallet/live';
+} from '#lib/wallet/live.ts';
 import { addressLines } from './fixtures';
-import { MASK } from '$lib/wallet/fixtures';
+import { MASK } from '#lib/wallet/fixtures.ts';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
 import {
 	liveContactPick,
@@ -84,7 +84,7 @@ import {
 	liveSendReceipt,
 	type SendLiveInputs
 } from './live-send';
-import type { WalletMessages } from '$lib/wallet/messages';
+import type { WalletMessages } from '#lib/wallet/messages.ts';
 import type {
 	AddTokenModel,
 	AssetsModel,
@@ -95,7 +95,7 @@ import type {
 	ReceiveListModel,
 	ReceiveQrModel
 } from './model';
-import type { ReceiveStanding } from '$lib/core/kernels';
+import type { ReceiveStanding } from '#lib/core/kernels.ts';
 
 export interface FlowsLiveInputs {
 	balance: BalanceView;

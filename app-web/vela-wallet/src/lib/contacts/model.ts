@@ -5,8 +5,8 @@
  * validation (spec FR-005 / SC-002 / SC-005). A later "real contacts" feature
  * replaces the fixture layer that builds them and nothing else.
  */
-import type { UtilityIconId } from '$lib/wallet/icons';
-import type { ActivityRowModel, ChainRowModel, WalletHeaderModel } from '$lib/wallet/model';
+import type { UtilityIconId } from '#lib/wallet/icons.ts';
+import type { ActivityRowModel, ChainRowModel, WalletHeaderModel } from '#lib/wallet/model.ts';
 
 export type MobileContactsStateId = 'c1' | 'c1s' | 'c1f' | 'c2' | 'c2s' | 'c3' | 'c4' | 'c5' | 'c6';
 

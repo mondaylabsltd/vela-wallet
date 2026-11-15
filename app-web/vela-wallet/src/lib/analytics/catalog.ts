@@ -10,7 +10,7 @@
  * built, and the payload is then refused whole if anything in it still looks
  * like an identifier (`payload.ts`).
  */
-import { SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
+import { SUPPORTED_LOCALES, type Locale } from '#lib/i18n/locales.ts';
 
 /**
  * How a wallet was created or signed into — the onboarding core's own

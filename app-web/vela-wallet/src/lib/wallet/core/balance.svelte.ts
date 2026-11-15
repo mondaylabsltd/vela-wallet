@@ -14,13 +14,13 @@
  * space's holdings — and a total that counted them — are not shown.
  */
 
-import { loadCore } from '$lib/core/client';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { ensureShownNetworks, inSpace } from '$lib/services/networks';
-import { loadHoldings, saveHoldings } from '$lib/services/holdings-cache';
+import { loadCore } from '#lib/core/client.ts';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { ensureShownNetworks, inSpace } from '#lib/services/networks.ts';
+import { loadHoldings, saveHoldings } from '#lib/services/holdings-cache.ts';
 import { onPrivacyElsewhere } from './privacy-sync';
 import { announceWalletSync, onWalletSyncElsewhere } from './wallet-sync';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
 import {
 	balanceSettledFor,
 	balanceView,

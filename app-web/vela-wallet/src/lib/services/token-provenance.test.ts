@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 // The core, initialised at import for the build-time resolver.
-import '$lib/i18n/engine.server';
-import { shortenAddress } from '$lib/wallet/identity';
+import '#lib/i18n/engine.server.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 import { provenanceNote, provenanceOf } from './token-provenance';
 
 const ARC = 5042002;

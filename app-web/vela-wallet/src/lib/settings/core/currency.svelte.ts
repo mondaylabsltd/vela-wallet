@@ -8,13 +8,13 @@
  * atomically-committed {code, rate} from here — 025's balances included.
  */
 
-import { DisplayCurrencyCore, loadCore } from '$lib/core/client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { onWalletSyncElsewhere } from '$lib/wallet/core/wallet-sync';
-import type { CurrencyEvent } from '$lib/core/generated/CurrencyEvent';
-import type { CurrencyShellResult } from '$lib/core/generated/CurrencyShellResult';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import { DisplayCurrencyCore, loadCore } from '#lib/core/client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { onWalletSyncElsewhere } from '#lib/wallet/core/wallet-sync.ts';
+import type { CurrencyEvent } from '#lib/core/generated/CurrencyEvent.ts';
+import type { CurrencyShellResult } from '#lib/core/generated/CurrencyShellResult.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
 import {
 	currencyOperationFailure,
 	executeCurrencyOperation,

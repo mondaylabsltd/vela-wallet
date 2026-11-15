@@ -6,11 +6,11 @@
 	 * again for the next signature; nothing is remembered. Closing it signs
 	 * nothing.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName } from '$lib/services/networks';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { chainName } from '#lib/services/networks.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { RiskRequest } from '../core/gate.svelte';
 	import type { MultisigMessages } from '../messages';
 	import { findingLines } from './findings';

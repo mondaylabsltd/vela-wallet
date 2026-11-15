@@ -11,12 +11,12 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import type { AccountsSheetModel } from '../model';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import SkeletonRow from '#lib/wallet/ui/SkeletonRow.svelte';
 
 	interface Props {
 		sheet: AccountsSheetModel;

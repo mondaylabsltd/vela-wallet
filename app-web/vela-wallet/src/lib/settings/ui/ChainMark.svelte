@@ -9,7 +9,7 @@
 	 * Fixture data, not a theme token: these colours belong to Ethereum and
 	 * BNB, not to Vela's palette, and they must not flip with the theme.
 	 */
-	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
+	import RemoteLogo from '#lib/wallet/ui/RemoteLogo.svelte';
 	import type { ChainMarkModel } from '../model';
 
 	interface Props {

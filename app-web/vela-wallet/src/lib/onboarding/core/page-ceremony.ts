@@ -7,9 +7,9 @@
  * The core names a page for a custom-domain wallet (only its page can mint or
  * use its keys), and — in the Safari package — for every ceremony: WebKit
  * refuses an extension page a `getvela.app` passkey, so the Safari wallet
- * creates, signs in and proves on `sign.getvela.app` (`$lib/signing/surface.ts`).
+ * creates, signs in and proves on `sign.getvela.app` (`#lib/signing/surface.ts`).
  *
- * The same hand-off every signature uses (`$lib/signing/page-handoff.svelte.ts`):
+ * The same hand-off every signature uses (`#lib/signing/page-handoff.svelte.ts`):
  * the page checked as the apps check it (R6), the card, Open, and the page's
  * answer accepted only as the core accepts it — the ceremony asked for, from
  * the page this opened (the origin its authenticator signed), over a challenge
@@ -22,13 +22,13 @@ import {
 	trustedSignerCeremonyRequest,
 	trustedSignerCeremonyVerify,
 	type CeremonyAnswer
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import {
 	browserDeps,
 	handOff,
 	PageHandoffError,
 	type PageHandoffDeps
-} from '$lib/signing/page-handoff.svelte';
+} from '#lib/signing/page-handoff.svelte.ts';
 import { PasskeyError } from './passkey';
 import * as Registry from './registry';
 import type { ShellOperation } from '../generated/ShellOperation';

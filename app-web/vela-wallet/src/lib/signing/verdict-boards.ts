@@ -22,8 +22,8 @@
  * - SV7 — the call fails: "Expected to fail", with the reason the core cleaned.
  * - SV8 — nothing could be checked: the caution.
  */
-import { judgedByFreshMachine, simOutcome, type TrustFacts } from '$lib/core/kernels';
-import { IDENTITY } from '$lib/wallet/fixtures';
+import { judgedByFreshMachine, simOutcome, type TrustFacts } from '#lib/core/kernels.ts';
+import { IDENTITY } from '#lib/wallet/fixtures.ts';
 import type { SigningMessages } from './messages';
 import type { Block, SigningModel, SigningStateId, VerdictBlock } from './model';
 import { NOT_OFFERED, nativeLog, ran, reverted, transferLog } from './sim-replies';

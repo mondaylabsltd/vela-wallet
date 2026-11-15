@@ -20,10 +20,10 @@
  * tracker hand-off and withdrawal (contract §4, "every shell's hand-off
  * de-duplication must include `admitted`").
  */
-import type { SignEvent } from '$lib/core/generated/SignEvent';
-import type { SignTrackerHandoff } from '$lib/core/generated/SignTrackerHandoff';
-import type { SignTrackerWithdraw } from '$lib/core/generated/SignTrackerWithdraw';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import type { SignEvent } from '#lib/core/generated/SignEvent.ts';
+import type { SignTrackerHandoff } from '#lib/core/generated/SignTrackerHandoff.ts';
+import type { SignTrackerWithdraw } from '#lib/core/generated/SignTrackerWithdraw.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 
 /**
  * One hand-off, as fed once: the op, the records it closes, and what it says

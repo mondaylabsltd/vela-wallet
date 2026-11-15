@@ -4,7 +4,7 @@
  * itself; Vela's sheet keeps the member's own passkey prompt; a member whose
  * keys nothing here can reach is refused with the core's reason.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SafeTx } from '../core/kernel';
 
@@ -23,8 +23,8 @@ vi.mock('../core/page-approval.svelte', () => ({
 const inVela = vi.fn(async () => {
 	throw new Error('signed in Vela');
 });
-vi.mock('$lib/signing/sign-challenge', async (original) => ({
-	...(await original<typeof import('$lib/signing/sign-challenge')>()),
+vi.mock('#lib/signing/sign-challenge.ts', async (original) => ({
+	...(await original<typeof import('#lib/signing/sign-challenge.ts')>()),
 	signChallenge: (...args: unknown[]) => inVela(...(args as []))
 }));
 

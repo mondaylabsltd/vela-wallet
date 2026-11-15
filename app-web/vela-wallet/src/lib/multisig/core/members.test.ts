@@ -4,7 +4,7 @@
  * address or Safe's sentinel, and the permanent shared name takes nothing
  * invisible and nothing that turns the text around.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { validName } from './kernel';
 import { memberProblem } from './members';

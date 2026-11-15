@@ -4,11 +4,11 @@
  * and the failure twin answers every operation.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { APIToken } from '$lib/services/tokens-model';
+import type { APIToken } from '#lib/services/tokens-model.ts';
 import type { BalanceEffect, BalanceStreamSink } from './balance-types';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
@@ -27,7 +27,7 @@ const ETH: APIToken = {
 	spam: false
 };
 
-vi.mock('$lib/services/wallet-api', () => ({
+vi.mock('#lib/services/wallet-api.ts', () => ({
 	fetchTokens: vi.fn(
 		async (
 			_address: string,
@@ -46,7 +46,7 @@ vi.mock('$lib/services/wallet-api', () => ({
 	// The real classifier is `wallet-api-chain-outage.test.ts`'s; here, a word.
 	readFailedInsideApp: (error: unknown) => error instanceof Error && error.message === 'inside'
 }));
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	getRateLimitedChains: vi.fn(() => new Set([56])),
 	// Owner decision 2026-10-28: the person's own nodes, as the pool says.
 	getOwnNodeUnreachedChains: vi.fn(() => [137]),
@@ -55,8 +55,8 @@ vi.mock('$lib/services/rpc-pool', () => ({
 
 import { createBalanceExecutor } from './balance-executor';
 import { onPrivacyElsewhere, usePrivacyChannel } from './privacy-sync';
-import { fetchTokens } from '$lib/services/wallet-api';
-import { spaceNetworksSync } from '$lib/services/networks';
+import { fetchTokens } from '#lib/services/wallet-api.ts';
+import { spaceNetworksSync } from '#lib/services/networks.ts';
 
 const effect = (operation: BalanceEffect['operation']): BalanceEffect => ({ id: 1, operation });
 const ADDR = '0x14fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d1e';

@@ -9,7 +9,7 @@
  * state and the core filters bans at SELECTION, not collection (invariant ⑧).
  */
 
-import { loadCore, publicRpcUrls } from '$lib/core/client';
+import { loadCore, publicRpcUrls } from '#lib/core/client.ts';
 import { fetchChainInfo } from './chain-registry';
 import { getBundlerServiceURL } from './endpoints';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from './networks';

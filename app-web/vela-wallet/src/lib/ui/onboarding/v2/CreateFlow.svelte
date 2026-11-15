@@ -11,7 +11,7 @@
 	 * exactly the moment a person committed to creating a wallet. The Welcome
 	 * page that hosts it never loads it.
 	 */
-	import { markHistory } from '$lib/ui/history';
+	import { markHistory } from '#lib/ui/history.ts';
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import FlowShell from './FlowShell.svelte';
 	import { RAIL_STEPS, type RailSlot } from './rail';
@@ -20,21 +20,21 @@
 	import ProgressScreen from './ProgressScreen.svelte';
 	import DoneScreen from './DoneScreen.svelte';
 	import RetryScreen from './RetryScreen.svelte';
-	import { loadOnboardingCore } from '$lib/onboarding/core/wasm-client';
-	import { loadAccounts } from '$lib/onboarding/core/storage';
+	import { loadOnboardingCore } from '#lib/onboarding/core/wasm-client.ts';
+	import { loadAccounts } from '#lib/onboarding/core/storage.ts';
 	import {
 		createCreateWalletSession,
 		type CreateWalletSession
-	} from '$lib/onboarding/core/sessions';
-	import { progressFor, statusKeyToI18n, submitLabelToI18n } from '$lib/onboarding/core/copy';
-	import type { CreateView } from '$lib/onboarding/generated/CreateView';
-	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
-	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
-	import { track, type AnalyticsEventProps } from '$lib/analytics';
-	import { analyticsMethod } from '$lib/analytics/methods';
-	import { SIGNING_SURFACE } from '$lib/signing/surface';
-	import { harnessSigningPage } from '$lib/dev/harness-page';
+	} from '#lib/onboarding/core/sessions.ts';
+	import { progressFor, statusKeyToI18n, submitLabelToI18n } from '#lib/onboarding/core/copy.ts';
+	import type { CreateView } from '#lib/onboarding/generated/CreateView.ts';
+	import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
+	import type { CompletionMode } from '#lib/onboarding/generated/CompletionMode.ts';
+	import type { PromptKind } from '#lib/onboarding/generated/PromptKind.ts';
+	import { track, type AnalyticsEventProps } from '#lib/analytics/index.ts';
+	import { analyticsMethod } from '#lib/analytics/methods.ts';
+	import { SIGNING_SURFACE } from '#lib/signing/surface.ts';
+	import { harnessSigningPage } from '#lib/dev/harness-page.ts';
 
 	interface Props {
 		strings: (key: string, params?: Record<string, string | number>) => string;
@@ -53,7 +53,7 @@
 	let { strings, privacyUrl, termsUrl, prompt, complete, onExit, doneAside }: Props = $props();
 
 	/**
-	 * Usage statistics (`$lib/analytics`): the attempt starts at the first key
+	 * Usage statistics (`#lib/analytics/index.ts`): the attempt starts at the first key
 	 * minted, completes when the core says the wallet is real, and fails on a
 	 * dismissed prompt, a publish that did not land, or a refusal — each named
 	 * by kind and by the method of the key that was being made, never by more.

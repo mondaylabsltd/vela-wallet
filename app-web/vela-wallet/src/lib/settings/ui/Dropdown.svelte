@@ -7,8 +7,8 @@
 	 * that out explicitly (下拉菜单浮层需逃出容器裁剪).
 	 */
 	import type { SelectRowModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import SelectRow from './SelectRow.svelte';
 
 	interface Props {

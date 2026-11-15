@@ -13,14 +13,14 @@
  * nothing beside it fails here first.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { BatchView } from '$lib/core/generated/BatchView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { preferences } from '$lib/services/preferences.svelte';
+import type { BatchView } from '#lib/core/generated/BatchView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { preferences } from '#lib/services/preferences.svelte.ts';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
 import type { BatchRowModel } from './model';
 import { withLiveDesktopFlow } from './live';
-import { fill } from '$lib/wallet/messages';
+import { fill } from '#lib/wallet/messages.ts';
 
 const m = resolveWalletFlowMessages('en');
 const identicon = () => '<svg/>';

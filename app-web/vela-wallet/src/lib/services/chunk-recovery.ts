@@ -77,7 +77,7 @@ export function reloadRecovers(facts: PreloadFailureFacts): boolean {
 export const RECOVERY_KEY = 'vela.chunkRecovery';
 
 export interface ChunkRecoveryPorts {
-	/** This document's build (`version` of `$app/environment`). */
+	/** This document's build (`version` of `$app/env`). */
 	version: string;
 	/** Ask the server whether another build is deployed (`updated.check()`). */
 	moved: () => Promise<boolean>;

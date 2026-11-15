@@ -19,10 +19,10 @@
 	 * rather than offered — where it signs is marked, and every page row is
 	 * drawn disabled with the core's reason (D-16).
 	 */
-	import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+	import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
 	import type { VenueModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import IntegrityLine from './IntegrityLine.svelte';
 
 	interface Props {

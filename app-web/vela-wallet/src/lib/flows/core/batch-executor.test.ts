@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const picked = vi.hoisted(() => ({ value: null as unknown }));
-vi.mock('$lib/services/file-io', () => ({
+vi.mock('#lib/services/file-io.ts', () => ({
 	pickTable: vi.fn(async () => picked.value),
 	saveTextFile: vi.fn(async () => undefined)
 }));

@@ -6,7 +6,7 @@
  * replaces the fixture layer that builds them and nothing else.
  */
 
-import type { ProvenanceNote } from '$lib/services/token-provenance';
+import type { ProvenanceNote } from '#lib/services/token-provenance.ts';
 
 export type MobileStateId = 'h1' | 'h1s' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'h7' | 'h7x' | 'h8';
 

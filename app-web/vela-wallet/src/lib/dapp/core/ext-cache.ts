@@ -23,11 +23,11 @@
  * truth here — and `request_extension_sign` is acked. Answering beats skipping:
  * an unanswered effect stalls the loop.
  */
-import { ExtCacheCore, loadCore } from '$lib/core/client';
-import type { Account } from '$lib/core/generated/Account';
-import type { ExtCacheOperation } from '$lib/core/generated/ExtCacheOperation';
-import type { ExtCacheShellResult } from '$lib/core/generated/ExtCacheShellResult';
-import type { ExtSnapshot } from '$lib/core/generated/ExtSnapshot';
+import { ExtCacheCore, loadCore } from '#lib/core/client.ts';
+import type { Account } from '#lib/core/generated/Account.ts';
+import type { ExtCacheOperation } from '#lib/core/generated/ExtCacheOperation.ts';
+import type { ExtCacheShellResult } from '#lib/core/generated/ExtCacheShellResult.ts';
+import type { ExtSnapshot } from '#lib/core/generated/ExtSnapshot.ts';
 import { EXT_CACHE_KEY } from '../keys';
 
 interface DispatchResult {

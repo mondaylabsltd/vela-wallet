@@ -8,7 +8,7 @@
  * carried it names nothing — the pre-068 wire — rather than a neighbouring
  * tier the fee was not priced at.
  */
-import type { FeeTier } from '$lib/core/generated/FeeTier';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
 
 export function wireTier(tier: FeeTier | null | undefined): Exclude<FeeTier, 'rapid'> | undefined {
 	return tier == null || tier === 'rapid' ? undefined : tier;

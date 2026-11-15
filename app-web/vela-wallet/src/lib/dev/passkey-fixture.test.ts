@@ -7,7 +7,7 @@
  * the signature verifies against that account's public key over the exact
  * bytes a real authenticator would have signed.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	concatBytes,
@@ -18,7 +18,7 @@ import {
 	stripHexPrefix,
 	toHex,
 	verifySafeWebAuthn
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import {
 	buildMockAssertion,
 	fixtureAccount,

@@ -40,9 +40,9 @@
  * The gallery's R4 (`ShareCard.svelte`) draws this same document inline, so
  * the card on screen and the card saved are one composition.
  */
-import { APP_ICON } from '$lib/ui/brand-mark';
-import { FONT_MONO, FONT_UI } from '$lib/tokens/tokens';
-import { saveBlob } from '$lib/services/file-io';
+import { APP_ICON } from '#lib/ui/brand-mark.ts';
+import { FONT_MONO, FONT_UI } from '#lib/tokens/tokens.ts';
+import { saveBlob } from '#lib/services/file-io.ts';
 import type { ShareCardModel } from './model';
 
 /**

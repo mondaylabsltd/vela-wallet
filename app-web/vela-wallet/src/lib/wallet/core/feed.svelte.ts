@@ -9,18 +9,18 @@
  * — local names win over the network — comes from the session store.
  */
 
-import { accountName } from '$lib/multisig/core/account-name';
-import { multisigAccountsForExt } from '$lib/multisig/core/ext';
-import { loadCore } from '$lib/core/client';
-import type { FeedPresence } from '$lib/core/generated/FeedPresence';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { session } from '$lib/session/core/session.svelte';
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { balanceView, subscribeBalanceDashboard } from '$lib/wallet/core/balance-resident';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
-import { balanceReadPlan } from '$lib/core/kernels';
-import { decimalToBase, onNativeBalanceMoved, setShownNative } from '$lib/services/native-watch';
+import { accountName } from '#lib/multisig/core/account-name.ts';
+import { multisigAccountsForExt } from '#lib/multisig/core/ext.ts';
+import { loadCore } from '#lib/core/client.ts';
+import type { FeedPresence } from '#lib/core/generated/FeedPresence.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { balanceView, subscribeBalanceDashboard } from '#lib/wallet/core/balance-resident.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import { spaceNetworksSync, subscribeNetworks } from '#lib/services/networks.ts';
+import { balanceReadPlan } from '#lib/core/kernels.ts';
+import { decimalToBase, onNativeBalanceMoved, setShownNative } from '#lib/services/native-watch.ts';
 import type { CadencePort } from './incoming-cadence';
 import {
 	activityFeedView,

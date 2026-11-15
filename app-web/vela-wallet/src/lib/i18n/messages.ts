@@ -186,7 +186,7 @@ const FLOW_OUTCOME_SCREEN_KEYS = [
  * Flow keys that are PLURAL (issue 409): the corpus holds `key_one`,
  * `key_other`, … and no bare `key`. `resolveFlowMessages` ships each locale's
  * forms — the categories the core says that locale has — and the screen picks
- * one at render time with the core's rule (`$lib/i18n/plural.ts`).
+ * one at render time with the core's rule (`#lib/i18n/plural.ts`).
  *
  * `onboarding.create.successMessage` is the line under "Wallet created": one
  * key reads "Your key can sign in on its own", several "Any of your N keys…".

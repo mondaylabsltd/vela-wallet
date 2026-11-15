@@ -4,11 +4,11 @@
  * wherever the other `authority.*` refusals are, in every locale; and the
  * proposal list's non-member words exist in every locale too.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { resolveMultisigMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { chainName } from '$lib/services/networks';
+import { resolveMultisigMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { chainName } from '#lib/services/networks.ts';
 import { findingText, refusalText } from './findings';
 
 const MEMBER = '0x1234567890AbcdEF1234567890aBcdef12345678';

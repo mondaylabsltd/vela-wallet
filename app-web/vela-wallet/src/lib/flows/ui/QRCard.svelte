@@ -14,8 +14,8 @@
 	 *   would carry an identicon that no longer matches it.
 	 */
 	import type { Snippet } from 'svelte';
-	import { RECEIVE_MODULES, RECEIVE_SEED, qrPattern } from '$lib/wallet/qr-pattern';
-	import type { QrCode } from '$lib/wallet/qr';
+	import { RECEIVE_MODULES, RECEIVE_SEED, qrPattern } from '#lib/wallet/qr-pattern.ts';
+	import type { QrCode } from '#lib/wallet/qr.ts';
 
 	interface Props {
 		label: string;

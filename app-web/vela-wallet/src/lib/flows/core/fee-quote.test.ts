@@ -9,7 +9,7 @@
 //  2. a quote that settles as failed drops it too, so a retry never reuses the
 //     inputs that failed it — and a quote that settles well leaves it held.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 
 const seams = vi.hoisted(() => ({
 	invalidate: vi.fn(),
@@ -20,11 +20,11 @@ const seams = vi.hoisted(() => ({
 	onView: null as ((view: unknown) => void) | null
 }));
 
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	invalidateFeeSignals: seams.invalidate,
 	accountIsDeployed: seams.deployed
 }));
-vi.mock('$lib/core/client', () => ({ loadCore: seams.load }));
+vi.mock('#lib/core/client.ts', () => ({ loadCore: seams.load }));
 vi.mock('./send-estimates', () => ({ resolveFee: () => null }));
 vi.mock('./fee-session', () => ({
 	createFeeSession: (options: { onView: (view: unknown) => void }) => {
@@ -240,7 +240,7 @@ describe('FeeQuote — the fee coin nobody chose (spec 078)', () => {
 	// Issue 408: the core writes a coin's shortfall ("3,58361 USDT") in the
 	// person's number preset, so the request carries it — resolved, never `auto`.
 	it('carries the resolved number preset onto `quote_requested`', async () => {
-		const { preferences } = await import('$lib/services/preferences.svelte');
+		const { preferences } = await import('#lib/services/preferences.svelte.ts');
 		const before = preferences.numberFormat;
 		preferences.setNumberFormat('dot_comma');
 		try {

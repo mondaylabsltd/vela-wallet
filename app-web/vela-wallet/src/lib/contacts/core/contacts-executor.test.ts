@@ -7,18 +7,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContactEffect } from './contacts-types';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 
 const identity = { value: null as { name: string; source: string } | null };
-vi.mock('$lib/services/recipient-identity', () => ({
+vi.mock('#lib/services/recipient-identity.ts', () => ({
 	resolveRecipientIdentity: vi.fn(async () => identity.value)
 }));
 const rpc = { response: { jsonrpc: '2.0', id: 1 } as Record<string, unknown> };
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	poolRpcCall: vi.fn(async () => rpc.response)
 }));
 
@@ -183,7 +183,7 @@ describe('the failure twin', () => {
 		});
 	});
 	it('a storage fault on read rejects (so the twin answers it)', async () => {
-		const storage = await import('$lib/services/storage');
+		const storage = await import('#lib/services/storage.ts');
 		vi.mocked(storage.getItem).mockRejectedValueOnce(new Error('torn database'));
 		await expect(executeContactOperation(effect({ type: 'read_store' }))).rejects.toThrow(
 			'torn database'

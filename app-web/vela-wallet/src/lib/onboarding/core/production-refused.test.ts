@@ -6,10 +6,10 @@
  * `index_failed { refused: true, network: false }`, and it was asked once.
  * The guard's inner `fetch` answers on this machine: nothing reaches out.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { productionWriteVerdict } from '../../../../../../rust/pkg-web/vela_core.js';
-import { guardFetch, type Decide, type WriteVerdict } from '$lib/services/production-guard';
+import { guardFetch, type Decide, type WriteVerdict } from '#lib/services/production-guard.ts';
 import { operationFailure } from './executor';
 import { RegistryError, memberChallenge, registerGroup } from './registry';
 

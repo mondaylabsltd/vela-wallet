@@ -15,18 +15,18 @@
  * executor; only the network reads are stood in for (the account read fails
  * as the chain out of reach), and the clock is the test's.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 
 const seams = vi.hoisted(() => ({ deployed: vi.fn(), gasSignals: vi.fn() }));
 
-vi.mock('$lib/services/bundler-service', () => ({
+vi.mock('#lib/services/bundler-service.ts', () => ({
 	fetchInBandGasQuotes: vi.fn(async () => null),
 	fetchBundlerAccountInfo: vi.fn(async () => null)
 }));
-vi.mock('$lib/services/wallet-api', () => ({ getCachedNativePriceUsd: () => null }));
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/wallet-api.ts', () => ({ getCachedNativePriceUsd: () => null }));
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	accountIsDeployed: seams.deployed,
 	fetchRawBundlerQuote: vi.fn(async () => null),
 	fetchRawGasSignals: seams.gasSignals,
@@ -34,9 +34,9 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	measureCallGasForQuote: vi.fn(),
 	simulateUserOpGas: vi.fn()
 }));
-vi.mock('$lib/services/accounts', () => ({ findAccountByAddress: vi.fn(async () => null) }));
+vi.mock('#lib/services/accounts.ts', () => ({ findAccountByAddress: vi.fn(async () => null) }));
 
-import { DeploymentReadError } from '$lib/services/deployment-read';
+import { DeploymentReadError } from '#lib/services/deployment-read.ts';
 import { createFeeSession } from './fee-session';
 
 const ACCOUNT = '0x1111111111111111111111111111111111111111';

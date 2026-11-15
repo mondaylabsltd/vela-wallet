@@ -1,4 +1,4 @@
-import { negotiate } from '$lib/i18n/locales';
+import { negotiate } from '#lib/i18n/locales.ts';
 
 /**
  * `/pay` — a payment link's front door (spec 039 Part B), the address the

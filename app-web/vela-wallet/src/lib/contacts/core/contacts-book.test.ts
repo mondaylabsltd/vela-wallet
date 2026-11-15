@@ -19,7 +19,7 @@ type StubSession = {
 
 const seams = vi.hoisted(() => ({ sessions: [] as StubSession[] }));
 
-vi.mock('$lib/core/client', () => ({ loadCore: () => Promise.resolve() }));
+vi.mock('#lib/core/client.ts', () => ({ loadCore: () => Promise.resolve() }));
 vi.mock('./contacts', () => ({
 	createContactsSession: (options: { onView: (view: unknown) => void }) => {
 		const session: StubSession = {

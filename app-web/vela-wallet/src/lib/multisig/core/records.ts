@@ -5,8 +5,8 @@
  * are only worded — a token's symbol and decimals (read from the chain), the
  * proposal's title in the page's words.
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import type { MultisigMessages } from '../messages';
 import { actionTitle, memberActionTitle, shortenAddress, tokenInfo, UNREAD_TOKEN } from './display';
 import { names } from './names.svelte';
@@ -60,7 +60,7 @@ export function rewordMemberRows(m: MultisigMessages): Promise<number> {
 let rewording: Promise<number> = Promise.resolve(0);
 
 async function rewordMemberRowsNow(m: MultisigMessages): Promise<number> {
-	const { loadTransactions, updateTransaction } = await import('$lib/services/records');
+	const { loadTransactions, updateTransaction } = await import('#lib/services/records.ts');
 	let changed = 0;
 	for (const row of await loadTransactions()) {
 		if (!row.id.startsWith('multisig:') || !row.multisigChange) continue;
@@ -83,7 +83,7 @@ const FALLBACK_CANCEL = /^Cancel transaction #(\d+)$/;
  */
 export async function rewordCancelRows(template: string): Promise<number> {
 	if (template === 'Cancel transaction #{{nonce}}') return 0;
-	const { loadTransactions, updateTransaction } = await import('$lib/services/records');
+	const { loadTransactions, updateTransaction } = await import('#lib/services/records.ts');
 	const rows = (await loadTransactions()).filter(
 		(t) => t.id.startsWith('multisig:') && FALLBACK_CANCEL.test(t.intent ?? '')
 	);

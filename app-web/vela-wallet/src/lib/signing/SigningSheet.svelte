@@ -3,11 +3,11 @@
 	import SigningHeader from './ui/SigningHeader.svelte';
 	import SigningAction from './ui/SigningAction.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import StatusHero from '#lib/flows/ui/StatusHero.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import type { SigningModel } from './model';
-	import type { HoldPhase } from '$lib/ui/hold-confirm';
+	import type { HoldPhase } from '#lib/ui/hold-confirm.ts';
 
 	/**
 	 * The phone signing sheet (spec 022) — a bottom sheet over the page that

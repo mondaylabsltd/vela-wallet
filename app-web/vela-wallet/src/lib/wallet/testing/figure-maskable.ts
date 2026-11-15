@@ -6,7 +6,7 @@
  * rule, for synthetic rows: the shared fixture (`privacy-fixture.test.ts`)
  * pins the core's own answers, so a drift between the two shows there.
  */
-import type { FeedItem } from '$lib/core/generated/FeedItem';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
 
 export function coreFigureMaskable(item: Omit<FeedItem, 'figure_maskable'>): boolean {
 	if (item.value !== null) return true;

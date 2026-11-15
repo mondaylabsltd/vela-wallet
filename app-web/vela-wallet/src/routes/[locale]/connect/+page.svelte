@@ -37,49 +37,49 @@
 	 * the mailbox's refusals in plain words, what was signed kept and sent
 	 * again (r5reg-12); each request named by what it was (r4C-12).
 	 */
-	import { replaceUrl } from '$lib/ui/history';
+	import { replaceUrl } from '#lib/ui/history.ts';
 	import { onMount, untrack } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
-	import { loadCore } from '$lib/core/client';
-	import { eip55 } from '$lib/multisig/external/eip55';
-	import { shortenAddress } from '$lib/wallet/identity';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { chainName, nativeSymbol } from '$lib/services/networks';
-	import { discoverProviders, type ProviderDetail } from '$lib/multisig/external/eip6963';
-	import { problemText } from '$lib/multisig/external/errors';
+	import Button from '#lib/ui/Button.svelte';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
+	import { loadCore } from '#lib/core/client.ts';
+	import { eip55 } from '#lib/multisig/external/eip55.ts';
+	import { shortenAddress } from '#lib/wallet/identity.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { chainName, nativeSymbol } from '#lib/services/networks.ts';
+	import { discoverProviders, type ProviderDetail } from '#lib/multisig/external/eip6963.ts';
+	import { problemText } from '#lib/multisig/external/errors.ts';
 	import {
 		connectLink,
 		isExpected,
 		OutsidePageHost,
 		readConnectHash
-	} from '$lib/multisig/shell/outside-page.svelte';
-	import type { OutsideActivityEntry } from '$lib/multisig/generated/OutsideActivityEntry';
-	import type { OutsideStep } from '$lib/multisig/generated/OutsideStep';
-	import type { OutsideRefusalKind } from '$lib/multisig/generated/OutsideRefusalKind';
-	import type { RelayStatus } from '$lib/multisig/generated/RelayStatus';
-	import TxReview from '$lib/multisig/external/TxReview.svelte';
-	import ReviewStateNote from '$lib/multisig/ui/ReviewStateNote.svelte';
-	import { BLIND_REFUSED_KEY, reviewDoor } from '$lib/multisig/core/review-door';
-	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
-	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
-	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
-	import { findingLines } from '$lib/multisig/ui/findings';
-	import type { Finding } from '$lib/multisig/core/refusal';
-	import { explorerTxUrl, formatUnits } from '$lib/multisig/core/display';
-	import { rowLabelText, rowOutcomeText } from '$lib/multisig/external/words';
-	import type { OutsideTxShown } from '$lib/multisig/generated/OutsideTxShown';
-	import type { OutsideTxView } from '$lib/multisig/generated/OutsideTxView';
+	} from '#lib/multisig/shell/outside-page.svelte.ts';
+	import type { OutsideActivityEntry } from '#lib/multisig/generated/OutsideActivityEntry.ts';
+	import type { OutsideStep } from '#lib/multisig/generated/OutsideStep.ts';
+	import type { OutsideRefusalKind } from '#lib/multisig/generated/OutsideRefusalKind.ts';
+	import type { RelayStatus } from '#lib/multisig/generated/RelayStatus.ts';
+	import TxReview from '#lib/multisig/external/TxReview.svelte';
+	import ReviewStateNote from '#lib/multisig/ui/ReviewStateNote.svelte';
+	import { BLIND_REFUSED_KEY, reviewDoor } from '#lib/multisig/core/review-door.ts';
+	import HoldConfirm from '#lib/ui/HoldConfirm.svelte';
+	import { refuseBlind } from '#lib/settings/refuse-blind.svelte.ts';
+	import AuthorityNotice from '#lib/multisig/ui/AuthorityNotice.svelte';
+	import { findingLines } from '#lib/multisig/ui/findings.ts';
+	import type { Finding } from '#lib/multisig/core/refusal.ts';
+	import { explorerTxUrl, formatUnits } from '#lib/multisig/core/display.ts';
+	import { rowLabelText, rowOutcomeText } from '#lib/multisig/external/words.ts';
+	import type { OutsideTxShown } from '#lib/multisig/generated/OutsideTxShown.ts';
+	import type { OutsideTxView } from '#lib/multisig/generated/OutsideTxView.ts';
 	import {
 		safeTxHashes,
 		verifyEcdsaApproval,
 		type MultisigReviewOut,
 		type SafeTx,
 		type SafeTxHashes
-	} from '$lib/multisig/core/kernel';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { refusedLine, rejectHint } from '$lib/multisig/core/approvals-words';
+	} from '#lib/multisig/core/kernel.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { refusedLine, rejectHint } from '#lib/multisig/core/approvals-words.ts';
 
 	let { data } = $props();
 	const m = $derived(data.multisigMessages.external);

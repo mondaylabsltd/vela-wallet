@@ -20,9 +20,9 @@
  * recovers with it. Only a second round that reaches nothing is the failure,
  * and the core words it (`tokens: null` → "could not load tokens").
  */
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { SendToken } from '$lib/core/generated/SendToken';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
 
 /** What the asset list says for one `FetchTokens`. */
 export type SendHoldingsAnswer =

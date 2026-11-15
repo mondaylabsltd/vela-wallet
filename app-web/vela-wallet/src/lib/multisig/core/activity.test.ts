@@ -115,14 +115,14 @@ vi.mock('./reading', () => ({
 			: null,
 	asReview: (a: unknown) => a
 }));
-vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => null }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('#lib/flows/marks.ts', () => ({ chainLogoURL: () => null }));
+vi.mock('#lib/services/networks.ts', () => ({
 	chainName: () => 'Gnosis',
 	nativeSymbol: () => 'xDAI'
 }));
-vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-fg-muted)' }));
+vi.mock('#lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-fg-muted)' }));
 // The chain index: it knows chain 77777 by name, and not 99999.
-vi.mock('$lib/services/chain-doc', () => ({
+vi.mock('#lib/services/chain-doc.ts', () => ({
 	readChainDoc: async (chainId: number) =>
 		chainId === 77777 ? { kind: 'doc', body: { name: 'Member Chain' } } : { kind: 'absent' }
 }));

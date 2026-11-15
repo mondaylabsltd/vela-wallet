@@ -7,11 +7,11 @@
  * constructs its own `ContactsCore` session while a send is open (024 D8: a
  * route-scoped session, not a global ledger) and hands its view here.
  */
-import { addressLine, displayName } from '$lib/contacts/live';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import { CHAIN_COLORS, chainColor } from '$lib/wallet/fixtures';
-import { fill } from '$lib/wallet/messages';
-import { pluralForm, type PluralCopy } from '$lib/i18n/plural';
+import { addressLine, displayName } from '#lib/contacts/live.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import { CHAIN_COLORS, chainColor } from '#lib/wallet/fixtures.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { pluralForm, type PluralCopy } from '#lib/i18n/plural.ts';
 import type { WalletFlowMessages } from './messages';
 import type { ContactPickModel } from './model';
 

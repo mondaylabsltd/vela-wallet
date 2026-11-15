@@ -5,7 +5,7 @@
 import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import WarningBanner from './WarningBanner.svelte';
 
 const TEXT = 'Vela couldn’t check what this transaction does. Review it before you sign.';

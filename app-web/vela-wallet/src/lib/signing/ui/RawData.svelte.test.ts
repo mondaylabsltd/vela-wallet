@@ -6,7 +6,7 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import RawData from './RawData.svelte';
 import { RAW_CAP } from '../raw-json';
 import type { RawDataModel } from '../model';

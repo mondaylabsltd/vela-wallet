@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const stored: { record: Record<string, string> } = { record: {} };
-vi.mock('$lib/onboarding/core/storage', () => ({
+vi.mock('#lib/onboarding/core/storage.ts', () => ({
 	loadServiceEndpoints: vi.fn(() => stored.record)
 }));
 

@@ -3,7 +3,7 @@
  * later, where a list the core cannot make a multisig of would only leave
  * Create disabled with no reason given.
  */
-import { addressEntry } from '$lib/core/kernels';
+import { addressEntry } from '#lib/core/kernels.ts';
 import { sameAddress, validOwner } from './kernel';
 
 /** Why `typed` cannot join `owners`, or `null` when it can. */

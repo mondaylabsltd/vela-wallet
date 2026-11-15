@@ -8,7 +8,7 @@
  * - r4b-17: a link opened on another page is carried to the wallet, read as
  *   chat apps and mail clients carry it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import {

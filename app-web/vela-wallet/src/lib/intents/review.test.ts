@@ -7,9 +7,9 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import type { NetView } from '$lib/core/generated/NetView';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { SignRequestView } from '$lib/core/generated/SignRequestView';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { SignRequestView } from '#lib/core/generated/SignRequestView.ts';
 import { reviewOf } from './review';
 
 beforeAll(() => {

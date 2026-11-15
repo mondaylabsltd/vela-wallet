@@ -7,7 +7,7 @@
  *
  * `keccak256` is the core's kernel: callers run after `loadCore()`.
  */
-import { keccak256 } from '$lib/core/client';
+import { keccak256 } from '#lib/core/client.ts';
 
 export function namehash(name: string): string {
 	let node: Uint8Array = new Uint8Array(32);

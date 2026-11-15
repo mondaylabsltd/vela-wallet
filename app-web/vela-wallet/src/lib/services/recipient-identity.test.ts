@@ -5,13 +5,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 // The kernel is Rust-tested; here any deterministic 32 bytes will do.
-vi.mock('$lib/core/client', () => ({
+vi.mock('#lib/core/client.ts', () => ({
 	keccak256: (data: Uint8Array) => {
 		const out = new Uint8Array(32);
 		for (let i = 0; i < data.length; i++) out[i % 32] ^= data[i];
@@ -78,7 +78,7 @@ const standInVerifier = (
 		: done('mismatch');
 };
 const index = { record: null as { name: string } | null, calls: 0 };
-vi.mock('$lib/services/public-key-index', () => ({
+vi.mock('#lib/services/public-key-index.ts', () => ({
 	queryWalletName: vi.fn(async () => {
 		index.calls += 1;
 		return index.record;
@@ -87,7 +87,7 @@ vi.mock('$lib/services/public-key-index', () => ({
 /** chainId → (`to:selector` → result). Anything unlisted answers `0x`. */
 const chain = new Map<number, Map<string, string>>();
 const rpcCalls: number[] = [];
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	poolRpcCall: vi.fn(async (_method: string, params: unknown[], chainId: number) => {
 		rpcCalls.push(chainId);
 		const { to, data } = params[0] as { to: string; data: string };
@@ -335,7 +335,7 @@ describe('a name service is asked only on a network the wallet has', () => {
 /** r4D-18 (round 5), spec 105: the testnet space reads only its own networks. */
 describe('in the testnet space', () => {
 	it('no mainnet name service is asked', async () => {
-		const { networkSpace } = await import('$lib/network-space/network-space.svelte');
+		const { networkSpace } = await import('#lib/network-space/network-space.svelte.ts');
 		serve(1, '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e', 'alice.eth');
 		networkSpace.set('testnet');
 		try {

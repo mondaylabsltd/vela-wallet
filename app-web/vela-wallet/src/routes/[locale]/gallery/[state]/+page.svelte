@@ -1,21 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { loadCore } from '$lib/core/client';
-	import { toLocale } from '$lib/i18n/locales';
-	import WalletDesktop from '$lib/wallet/WalletDesktop.svelte';
-	import WalletHome from '$lib/wallet/WalletHome.svelte';
-	import ContactsDesktop from '$lib/contacts/ContactsDesktop.svelte';
-	import ContactsHome from '$lib/contacts/ContactsHome.svelte';
-	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
-	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
-	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
-	import ExploreDesktop from '$lib/explore/ExploreDesktop.svelte';
-	import ExploreHome from '$lib/explore/ExploreHome.svelte';
-	import SigningSheet from '$lib/signing/SigningSheet.svelte';
-	import SettingsDesktop from '$lib/settings/SettingsDesktop.svelte';
-	import SettingsHome from '$lib/settings/SettingsHome.svelte';
-	import { withheldBoard } from '$lib/wallet/board-withheld';
+	import { loadCore } from '#lib/core/client.ts';
+	import { toLocale } from '#lib/i18n/locales.ts';
+	import WalletDesktop from '#lib/wallet/WalletDesktop.svelte';
+	import WalletHome from '#lib/wallet/WalletHome.svelte';
+	import ContactsDesktop from '#lib/contacts/ContactsDesktop.svelte';
+	import ContactsHome from '#lib/contacts/ContactsHome.svelte';
+	import FlowsMobile from '#lib/flows/FlowsMobile.svelte';
+	import FlowsPanel from '#lib/flows/FlowsPanel.svelte';
+	import ScanSurface from '#lib/flows/ui/ScanSurface.svelte';
+	import ExploreDesktop from '#lib/explore/ExploreDesktop.svelte';
+	import ExploreHome from '#lib/explore/ExploreHome.svelte';
+	import SigningSheet from '#lib/signing/SigningSheet.svelte';
+	import SettingsDesktop from '#lib/settings/SettingsDesktop.svelte';
+	import SettingsHome from '#lib/settings/SettingsHome.svelte';
+	import { withheldBoard } from '#lib/wallet/board-withheld.ts';
 	import Controls from '../Controls.svelte';
 
 	let { data } = $props();

@@ -7,8 +7,8 @@ import { createRawSnippet, tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page, userEvent } from 'vitest/browser';
-import '$lib/tokens/tokens.css';
-import Dialog from '$lib/settings/ui/Dialog.svelte';
+import '#lib/tokens/tokens.css';
+import Dialog from '#lib/settings/ui/Dialog.svelte';
 import IdenticonViewer from './IdenticonViewer.svelte';
 
 const COPY = {

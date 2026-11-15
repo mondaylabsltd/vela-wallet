@@ -10,13 +10,13 @@
  * files.
  */
 
-import type { SignErrorKind } from '$lib/core/generated/SignErrorKind';
-import type { SignErrorNotice } from '$lib/core/generated/SignErrorNotice';
-import type { SignOperation } from '$lib/core/generated/SignOperation';
-import type { SignView } from '$lib/core/generated/SignView';
-import type { SessionOptions } from '$lib/core/types';
+import type { SignErrorKind } from '#lib/core/generated/SignErrorKind.ts';
+import type { SignErrorNotice } from '#lib/core/generated/SignErrorNotice.ts';
+import type { SignOperation } from '#lib/core/generated/SignOperation.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
-import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
+import type { AssetSimResult } from '#lib/services/sim/tx-simulation.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type SignEffect = { id: number; operation: SignOperation };

@@ -13,7 +13,7 @@ import {
 	intentReview
 } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 
 const ME = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const live = {
@@ -21,24 +21,24 @@ const live = {
 	wallets: [ME] as string[]
 };
 
-vi.mock('$lib/core/client', () => ({ intentAdvice, intentAdviceStanding, intentReview }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { address: ME } } }));
-vi.mock('$lib/multisig/core/store.svelte', () => ({ multisig: { active: null } }));
-vi.mock('$lib/services/endpoints', () => ({ getEthereumDataURL: () => 'https://data.example' }));
-vi.mock('$lib/settings/core/network-admin.svelte', () => ({
+vi.mock('#lib/core/client.ts', () => ({ intentAdvice, intentAdviceStanding, intentReview }));
+vi.mock('#lib/session/core/session.svelte.ts', () => ({ session: { view: { address: ME } } }));
+vi.mock('#lib/multisig/core/store.svelte.ts', () => ({ multisig: { active: null } }));
+vi.mock('#lib/services/endpoints', () => ({ getEthereumDataURL: () => 'https://data.example' }));
+vi.mock('#lib/settings/core/network-admin.svelte.ts', () => ({
 	networkAdmin: { view: { loaded: false } }
 }));
-vi.mock('$lib/signing/core/sheet.svelte', () => ({
+vi.mock('#lib/signing/core/sheet.svelte.ts', () => ({
 	signingSheet: { clear: null, guard: null }
 }));
-vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
+vi.mock('#lib/signing/core/sign-resident.svelte.ts', () => ({
 	signRequest: {
 		get view() {
 			return { request: live.request };
 		}
 	}
 }));
-vi.mock('$lib/intents/index.svelte', () => ({
+vi.mock('#lib/intents/index.svelte.ts', () => ({
 	world: () => ({
 		session: { address: ME, accounts: [] },
 		contacts: null,

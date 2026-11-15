@@ -4,20 +4,20 @@
  * pinned to the cross-client bytes.
  */
 // The outcome of a thrown fetch is the core's rule (r11-9, `transportOutcomeOf`).
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RpcPoolCallRegistry, RpcPoolEffect } from './rpc-pool-types';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 // Endpoint collection fans out into config/registry fetches — not this test's
 // subject. The collector is exercised through load_pool_config with stubs.
-vi.mock('$lib/services/rpc-pool-endpoints', async (importOriginal) => {
-	const original = await importOriginal<typeof import('$lib/services/rpc-pool-endpoints')>();
+vi.mock('#lib/services/rpc-pool-endpoints.ts', async (importOriginal) => {
+	const original = await importOriginal<typeof import('#lib/services/rpc-pool-endpoints.ts')>();
 	return {
 		...original,
 		collectRpcUrls: vi.fn(async () => [{ url: 'https://rpc.one', source: 'default' as const }]),
@@ -328,9 +328,9 @@ describe('conclude and the failure twin', () => {
 
 describe('the relay status method is the core’s spelling (spec 082 RA7, G13)', () => {
 	it('USER_OP_STATUS_METHOD is userOpStatusMethod()', async () => {
-		await import('$lib/i18n/wasm-init.server');
-		const { userOpStatusMethod } = await import('$lib/core/kernels');
-		const { USER_OP_STATUS_METHOD } = await import('$lib/services/rpc-adapter');
+		await import('#lib/i18n/wasm-init.server.ts');
+		const { userOpStatusMethod } = await import('#lib/core/kernels.ts');
+		const { USER_OP_STATUS_METHOD } = await import('#lib/services/rpc-adapter.ts');
 		expect(USER_OP_STATUS_METHOD).toBe(userOpStatusMethod());
 		expect(USER_OP_STATUS_METHOD).toBe('pimlico_getUserOperationStatus');
 		// The core's first load, inside the test: 5 s is not enough under a full parallel run.

@@ -13,13 +13,13 @@
  * setting that silently drifts is a setting nobody can trust.
  */
 
-import { FeeTierPrefCore, loadCore } from '$lib/core/client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { FeeTierPrefEvent } from '$lib/core/generated/FeeTierPrefEvent';
-import type { FeeTierPrefShellResult } from '$lib/core/generated/FeeTierPrefShellResult';
-import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
+import { FeeTierPrefCore, loadCore } from '#lib/core/client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { FeeTierPrefEvent } from '#lib/core/generated/FeeTierPrefEvent.ts';
+import type { FeeTierPrefShellResult } from '#lib/core/generated/FeeTierPrefShellResult.ts';
+import type { FeeTierPrefView } from '#lib/core/generated/FeeTierPrefView.ts';
 import {
 	executeFeeTierPrefOperation,
 	feeTierPrefOperationFailure,

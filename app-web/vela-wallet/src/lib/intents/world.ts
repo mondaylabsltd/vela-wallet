@@ -3,14 +3,14 @@
  * hold, gathered at the moment of asking. Nothing here is a copy kept in sync
  * — each call reads the residents as they are.
  */
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
-import type { IntentOperation } from '$lib/core/generated/IntentOperation';
-import type { NetView } from '$lib/core/generated/NetView';
-import type { SessionView } from '$lib/session/generated/SessionView';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeeTierPrefView } from '#lib/core/generated/FeeTierPrefView.ts';
+import type { IntentOperation } from '#lib/core/generated/IntentOperation.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import type { SessionView } from '#lib/session/generated/SessionView.ts';
 
 export type World = {
 	session: SessionView | null;

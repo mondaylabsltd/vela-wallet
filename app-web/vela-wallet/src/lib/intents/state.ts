@@ -4,9 +4,9 @@
  * "set or not" — decided in the core (`intent_rules::agent_state`), the same
  * for every shell.
  */
-import { intentAgentState } from '$lib/core/client';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { FeedView } from '$lib/core/generated/FeedView';
+import { intentAgentState } from '#lib/core/client.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
 import type { ActivityEntry, PendingApproval } from './intents.svelte';
 import { worldJson, type World } from './world';
 

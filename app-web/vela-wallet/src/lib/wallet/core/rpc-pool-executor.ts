@@ -21,9 +21,9 @@ import {
 	rpcHedgeAfterMs,
 	rpcIsHedgedRead,
 	transportOutcomeOf
-} from '$lib/core/kernels';
-import { relayRpcHeader } from '$lib/services/relay-rpc-header';
-import { getItem, setItem } from '$lib/services/storage';
+} from '#lib/core/kernels.ts';
+import { relayRpcHeader } from '#lib/services/relay-rpc-header.ts';
+import { getItem, setItem } from '#lib/services/storage.ts';
 import {
 	BANNED_STORAGE_KEY,
 	collectBundlerUrls,
@@ -31,13 +31,13 @@ import {
 	NEVER_BANNED,
 	ownNodeOnly,
 	type RPCResponse
-} from '$lib/services/rpc-pool-endpoints';
+} from '#lib/services/rpc-pool-endpoints.ts';
 
-import type { RpcBanEntry } from '$lib/core/generated/RpcBanEntry';
-import type { RpcCallVerdict } from '$lib/core/generated/RpcCallVerdict';
-import type { RpcKind } from '$lib/core/generated/RpcKind';
-import type { RpcShellResult } from '$lib/core/generated/RpcShellResult';
-import type { RpcTransportOutcome } from '$lib/core/generated/RpcTransportOutcome';
+import type { RpcBanEntry } from '#lib/core/generated/RpcBanEntry.ts';
+import type { RpcCallVerdict } from '#lib/core/generated/RpcCallVerdict.ts';
+import type { RpcKind } from '#lib/core/generated/RpcKind.ts';
+import type { RpcShellResult } from '#lib/core/generated/RpcShellResult.ts';
+import type { RpcTransportOutcome } from '#lib/core/generated/RpcTransportOutcome.ts';
 import type { RpcPoolCallRegistry, RpcPoolEffect } from './rpc-pool-types';
 
 // ---------------------------------------------------------------------------

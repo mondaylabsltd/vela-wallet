@@ -6,7 +6,7 @@
  * `nav.*` re-resolves the spec-015 tab-bar keys so one messages object feeds
  * the whole screen, chrome included.
  */
-import type { PluralCopy } from '$lib/i18n/plural';
+import type { PluralCopy } from '#lib/i18n/plural.ts';
 
 export interface ExploreMessages {
 	title: string;

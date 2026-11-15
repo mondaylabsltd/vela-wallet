@@ -16,12 +16,12 @@
  *   own words (`signErrorWords` → `dapp_rpc::sign_error_words`: "This account
  *   cannot sign here"), not a copy kept in the web.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/services/dapp-submit')>();
-	const { VenueBlockedError } = await import('$lib/signing/sign-challenge');
+vi.mock('#lib/services/dapp-submit.ts', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('#lib/services/dapp-submit.ts')>();
+	const { VenueBlockedError } = await import('#lib/signing/sign-challenge.ts');
 	return {
 		...actual,
 		handleDAppRequest: async () => {
@@ -30,9 +30,9 @@ vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
 	};
 });
 
-import type { SignView } from '$lib/core/generated/SignView';
-import { signErrorWords } from '$lib/core/kernels';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import { signErrorWords } from '#lib/core/kernels.ts';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
 import { signingStatus } from '../live';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './sheet.svelte';
 

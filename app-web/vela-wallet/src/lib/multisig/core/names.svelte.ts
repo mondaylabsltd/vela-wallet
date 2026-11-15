@@ -11,7 +11,7 @@
  * screen shows), and each answer handed to the machine (`index_names`).
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { lookupWalletName } from '$lib/services/public-key-index';
+import { lookupWalletName } from '#lib/services/public-key-index.ts';
 import { localName, memberLabel } from './display';
 import { multisig, type MemberInfo } from './store.svelte';
 

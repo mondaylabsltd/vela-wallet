@@ -10,7 +10,7 @@
 import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { buildFlowState, MOBILE_FLOW_STATES } from './fixtures';
 import FlowsMobile from './FlowsMobile.svelte';
 import type { WalletFlowMessages } from './messages';

@@ -10,7 +10,7 @@
 	 *   corpus's words for the core's reason, with the way home. Nothing is
 	 *   kept: a broken link is not a request.
 	 * - **a wallet on this device** — the request is kept and the wallet takes
-	 *   it (`$lib/pay/kept`), opening Send locked to the link's network, token
+	 *   it (`#lib/pay/kept.ts`), opening Send locked to the link's network, token
 	 *   and amount. Send has the last word on what the wallet can do with it —
 	 *   a network it lacks, a token nobody can describe — and the person
 	 *   reviews and confirms before anything is signed. This page signs
@@ -25,12 +25,12 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { hasSignedInWallet, SIGN_IN_PARAM, STAY_PARAM } from '$lib/intro/gate';
-	import { validatePayQuery } from '$lib/flows/core/payment-request';
-	import { payQueryOf, refusalBody } from '$lib/pay/link';
-	import { keepPay } from '$lib/pay/kept';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { hasSignedInWallet, SIGN_IN_PARAM, STAY_PARAM } from '#lib/intro/gate.ts';
+	import { validatePayQuery } from '#lib/flows/core/payment-request.ts';
+	import { payQueryOf, refusalBody } from '#lib/pay/link.ts';
+	import { keepPay } from '#lib/pay/kept.ts';
 
 	let { data }: PageProps = $props();
 
@@ -62,7 +62,7 @@
 			}
 			keepPay(query);
 			if (hasSignedInWallet()) {
-				void goto(walletHref, { replaceState: true });
+				void goto(walletHref, { replace: true });
 				return;
 			}
 			stage = { kind: 'no_wallet', recipient: verdict.pay.recipient };

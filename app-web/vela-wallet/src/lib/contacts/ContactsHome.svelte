@@ -1,12 +1,12 @@
 <script lang="ts">
-	import ActionButtonRow from '$lib/wallet/ui/ActionButtonRow.svelte';
-	import ActivityRow from '$lib/wallet/ui/ActivityRow.svelte';
-	import EmptyState from '$lib/wallet/ui/EmptyState.svelte';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import SectionHeader from '$lib/wallet/ui/SectionHeader.svelte';
-	import TabBar from '$lib/wallet/ui/TabBar.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import ActionButtonRow from '#lib/wallet/ui/ActionButtonRow.svelte';
+	import ActivityRow from '#lib/wallet/ui/ActivityRow.svelte';
+	import EmptyState from '#lib/wallet/ui/EmptyState.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import SectionHeader from '#lib/wallet/ui/SectionHeader.svelte';
+	import TabBar from '#lib/wallet/ui/TabBar.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import type { ContactsHomeModel } from './model';
 	import type { OnContactsUiEvent } from './ui-events';
 	import ActionMenuSheet from './ui/ActionMenuSheet.svelte';

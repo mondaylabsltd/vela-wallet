@@ -11,8 +11,8 @@
  * The cleaned text is written back into the field, with the caret kept where
  * the person left it, so what is on screen is what was sent on.
  */
-import { amountTextCaret, amountTextClean } from '$lib/core/kernels';
-import { resolvedFormatKeys } from '$lib/services/locale-format';
+import { amountTextCaret, amountTextClean } from '#lib/core/kernels.ts';
+import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
 
 /**
  * Clean `el`'s text in place. Returns the figure to send on, or `null` when a

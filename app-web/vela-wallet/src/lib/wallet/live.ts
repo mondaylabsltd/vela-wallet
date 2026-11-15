@@ -16,32 +16,37 @@
  * the day headers and formats the amounts.
  */
 
-import { showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeedAllowance } from '$lib/core/generated/FeedAllowance';
-import type { FeedDapp } from '$lib/core/generated/FeedDapp';
-import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedLine } from '$lib/core/generated/FeedLine';
-import type { FeedRow } from '$lib/core/generated/FeedRow';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { currencyFractionDigits, fiatSymbol, maskedAmount } from '$lib/core/client';
-import { checksumAddress, formatRelativeTime } from '$lib/core/kernels';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeedAllowance } from '#lib/core/generated/FeedAllowance.ts';
+import type { FeedDapp } from '#lib/core/generated/FeedDapp.ts';
+import type { FeedDappChange } from '#lib/core/generated/FeedDappChange.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedLine } from '#lib/core/generated/FeedLine.ts';
+import type { FeedRow } from '#lib/core/generated/FeedRow.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { currencyFractionDigits, fiatSymbol, maskedAmount } from '#lib/core/client.ts';
+import { checksumAddress, formatRelativeTime } from '#lib/core/kernels.ts';
 import {
 	formatDate,
 	groupDigits,
 	numberSeparators,
 	resolvedFormatKeys
-} from '$lib/services/locale-format';
-import { chainName, explorerAddressURL, explorerBaseURL, namedChain } from '$lib/services/networks';
-import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
-import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
+} from '#lib/services/locale-format.ts';
+import {
+	chainName,
+	explorerAddressURL,
+	explorerBaseURL,
+	namedChain
+} from '#lib/services/networks.ts';
+import { balanceTokenMark, chainLogoURL } from '#lib/flows/marks.ts';
+import { provenanceNote, type ProvenanceNote } from '#lib/services/token-provenance.ts';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
-import { pageLanguage } from '$lib/i18n/page-language.svelte';
+import { pageLanguage } from '#lib/i18n/page-language.svelte.ts';
 import { BALANCE_MASK, chainColor, MASK } from './fixtures';
 import type { WalletMessages } from './messages';
 

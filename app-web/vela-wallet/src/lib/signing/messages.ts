@@ -15,9 +15,9 @@
  * so interpolation happens at prerender, like the wallet's.
  */
 
-import type { SpeedWords } from '$lib/flows/speed-control';
-import type { SettingsMessages } from '$lib/settings/messages';
-import type { AgentAdviceMessages } from '$lib/agent/advisor';
+import type { SpeedWords } from '#lib/flows/speed-control.ts';
+import type { SettingsMessages } from '#lib/settings/messages.ts';
+import type { AgentAdviceMessages } from '#lib/agent/advisor.ts';
 
 /**
  * Every quiet line the core can name for the verdict's place

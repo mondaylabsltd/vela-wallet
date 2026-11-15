@@ -19,11 +19,11 @@
 	 * After Open it is a wait: where to look, and a way back to the page.
 	 */
 	import type { HandoffModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
-	import IntegrityLine from '$lib/settings/ui/IntegrityLine.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import HoldConfirm from '#lib/ui/HoldConfirm.svelte';
+	import IntegrityLine from '#lib/settings/ui/IntegrityLine.svelte';
 
 	interface Props {
 		handoff: HandoffModel;

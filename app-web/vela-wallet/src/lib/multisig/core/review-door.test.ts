@@ -4,7 +4,7 @@
  * through the link door the web calls (`review.door`) — and the shell's own
  * fall-back: a door it could not ask for is shut.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import vectors from '../../../../../../rust/crates/vela-core/tests/vectors/multisig/review-state.json';

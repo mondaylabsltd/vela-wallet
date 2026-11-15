@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { EntryGenerator, PageServerLoad } from './$types';
-import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
-import { resolveAppPromptMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
+import { SUPPORTED_LOCALES, toLocale } from '#lib/i18n/locales.ts';
+import { resolveAppPromptMessages, resolveWalletMessages } from '#lib/i18n/engine.server.ts';
 
 /**
  * The create flow's own route (spec 019). Prerendered per locale like every

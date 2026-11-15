@@ -8,8 +8,8 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendView } from '$lib/core/generated/SendView';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
 
 const ceremony: { listener: ((event: 'started' | 'signed' | 'failed') => void) | null } = {
 	listener: null
@@ -29,13 +29,13 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
 /** Whether the shown account's balances have settled a round. */
 const settled = { yes: true };
-vi.mock('$lib/wallet/core/balance.svelte', () => ({
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({
 	balance: { view: held, settledFor: () => settled.yes }
 }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { address: '0xme' } } }));
-vi.mock('$lib/wallet/core/tracker-resident', () => ({ txTrackerView: () => tracker }));
-vi.mock('$lib/services/networks', () => ({ networkId: (chain: number) => `net-${chain}` }));
-vi.mock('$lib/onboarding/core/passkey', () => ({
+vi.mock('#lib/session/core/session.svelte', () => ({ session: { view: { address: '0xme' } } }));
+vi.mock('#lib/wallet/core/tracker-resident.ts', () => ({ txTrackerView: () => tracker }));
+vi.mock('#lib/services/networks', () => ({ networkId: (chain: number) => `net-${chain}` }));
+vi.mock('#lib/onboarding/core/passkey.ts', () => ({
 	onSignCeremony: (listener: (event: 'started' | 'signed' | 'failed') => void) => {
 		ceremony.listener = listener;
 		return () => {};
@@ -46,7 +46,7 @@ beforeAll(() => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
 });
 
-const { sendDesk } = await import('$lib/flows/send-desk.svelte');
+const { sendDesk } = await import('#lib/flows/send-desk.svelte.ts');
 const { transfers, REVIEW_SETTLE_MS } = await import('./transfers.svelte');
 
 /** The transfers' clock, moved on by hand, and the agent's switch. */

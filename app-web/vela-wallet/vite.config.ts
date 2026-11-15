@@ -8,8 +8,7 @@ import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { withBrotliCoreAdapter } from './scripts/wasm-brotli.mjs';
 import { createHash } from 'node:crypto';
-import type { KitConfig } from '@sveltejs/kit';
-import { CSP_DIRECTIVES } from './src/lib/security-headers';
+import { CSP_DIRECTIVES } from './src/lib/security-headers.ts';
 
 /**
  * `docs/design/onboarding/launch` holds the launch scene every platform is
@@ -124,7 +123,10 @@ async function signingPageScriptHashes(): Promise<string[]> {
 	});
 }
 
-const WALLET_CSP: NonNullable<KitConfig['csp']> = {
+/** The plugin's options; SvelteKit 3 exports no name for them. */
+type KitOptions = NonNullable<Parameters<typeof sveltekit>[0]>;
+
+const WALLET_CSP: NonNullable<KitOptions['csp']> = {
 	mode: 'hash',
 	directives: {
 		...Object.fromEntries(Object.entries(CSP_DIRECTIVES).map(([k, v]) => [k, [...v]])),
@@ -133,7 +135,7 @@ const WALLET_CSP: NonNullable<KitConfig['csp']> = {
 			appHtmlScriptHash(),
 			...(EXTENSION_TARGET ? [] : await signingPageScriptHashes())
 		]
-	} as NonNullable<KitConfig['csp']>['directives']
+	} as NonNullable<KitOptions['csp']>['directives']
 };
 
 /**
@@ -204,7 +206,7 @@ export default defineConfig({
 		__VELA_COMMIT__: JSON.stringify(BUILD.commit),
 		// Which build this is: usage analytics report from the hosted wallet's
 		// own origin in one, and only from `chrome-extension:` pages in the
-		// other (`$lib/analytics/gate.ts`).
+		// other (`#lib/analytics/gate.ts`).
 		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET),
 		// §28: a TEST build's opt-in to production writes (the dev server's;
 		// a development package's comes from its marker, extension/build.mjs).
@@ -215,7 +217,7 @@ export default defineConfig({
 				: (process.env.VELA_ALLOW_PRODUCTION_WRITES ?? '')
 		),
 		// Which browser's package this is, by the scheme its pages load from
-		// (`$lib/extension/page-url.ts`, `$lib/dapp/transport.ts`).
+		// (`#lib/extension/page-url.ts`, `#lib/dapp/transport.ts`).
 		__VELA_EXTENSION_PROTOCOL__: JSON.stringify(EXTENSION_PROTOCOL)
 	},
 	server: {

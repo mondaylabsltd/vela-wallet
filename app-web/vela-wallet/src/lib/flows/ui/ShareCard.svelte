@@ -14,8 +14,8 @@
 	 * faces and may point at the network's logo by URL; the saved picture
 	 * embeds both.
 	 */
-	import { buildQrPath } from '$lib/wallet/qr';
-	import { RECEIVE_SEED, qrPattern } from '$lib/wallet/qr-pattern';
+	import { buildQrPath } from '#lib/wallet/qr.ts';
+	import { RECEIVE_SEED, qrPattern } from '#lib/wallet/qr-pattern.ts';
 	import { CARD_PALETTE, composeShareSvg } from '../share-image';
 	import type { ShareCardModel } from '../model';
 

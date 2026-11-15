@@ -3,7 +3,7 @@
  * Base): one passkey founds any number of wallets, so a credential id does
  * not name a wallet — an address does.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
 const ONE = { id: 'cred-a', address: '0x' + 'd4'.repeat(20), publicKeyHex: '04' + '11'.repeat(64) };
@@ -21,8 +21,8 @@ vi.mock('./accounts', () => ({
 		[ONE, MULTI].find((a) => a.address === address.toLowerCase()),
 	findAccountByCredentialId: (id: string) => [ONE, MULTI].find((a) => a.id === id)
 }));
-vi.mock('$lib/onboarding/core/passkey', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/onboarding/core/passkey')>()),
+vi.mock('#lib/onboarding/core/passkey.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/onboarding/core/passkey.ts')>()),
 	signWithAny: vi.fn()
 }));
 vi.mock('./rpc-adapter', () => ({ rpcCall: vi.fn() }));
@@ -38,7 +38,7 @@ vi.mock('./networks', async (importOriginal) => ({
 	getAllNetworksSync: () => [{ chainId: 100 }]
 }));
 const passkey = vi.hoisted(() => ({ calls: 0 }));
-vi.mock('$lib/signing/sign-challenge', () => ({
+vi.mock('#lib/signing/sign-challenge.ts', () => ({
 	signChallenge: vi.fn(async () => {
 		passkey.calls += 1;
 		return {
@@ -49,8 +49,8 @@ vi.mock('$lib/signing/sign-challenge', () => ({
 		};
 	})
 }));
-vi.mock('$lib/core/kernels', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/kernels')>()),
+vi.mock('#lib/core/kernels.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/kernels.ts')>()),
 	verifySafeWebAuthn: () => ({ ok: true })
 }));
 
@@ -66,7 +66,7 @@ import {
 	type SignFn,
 	type SubmitResult
 } from './safe-transaction';
-import { AskerGoneError, WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
+import { AskerGoneError, WriteAheadTimeoutError } from '#lib/signing/core/sign-types.ts';
 
 describe('storedWalletFor', () => {
 	it('two wallets founded by one passkey: the request names which by ADDRESS', () => {

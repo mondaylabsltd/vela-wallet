@@ -7,15 +7,15 @@
  * unconfirmed caution with where a trusted node is set, and "Checked by your
  * own node only" under an own-node check.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import vectors from '../../../../../rust/crates/vela-core/tests/vectors/rules/signing-truth.json';
-import { judgedByFreshMachine, rpcCorroboratedEnvelope, simOutcome } from '$lib/core/kernels';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import { judgedByFreshMachine, rpcCorroboratedEnvelope, simOutcome } from '#lib/core/kernels.ts';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
 import { landedVerdict } from './verdict';
 import { ran, nativeLog } from './sim-replies';
 import { ownNodeAlone, singleNode, witnessed } from './sim-witnessed';
-import { corroboratedEnvelope } from '$lib/services/corroborated-read';
+import { corroboratedEnvelope } from '#lib/services/corroborated-read.ts';
 
 const USER = vectors.user;
 

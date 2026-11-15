@@ -14,8 +14,8 @@
  * goes releases what it held.
  */
 import { describe, expect, it } from 'vitest';
-import type { TrackEvent } from '$lib/core/generated/TrackEvent';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import type { TrackEvent } from '#lib/core/generated/TrackEvent.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 import {
 	startFollower,
 	startVoice,

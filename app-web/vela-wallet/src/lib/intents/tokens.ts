@@ -5,14 +5,14 @@
  * The core's view says whether it was found and stored; nothing is decided
  * here.
  */
-import { loadCore } from '$lib/core/client';
-import type { IntentReason } from '$lib/core/generated/IntentReason';
-import type { MtokView } from '$lib/core/generated/MtokView';
-import { spaceNetworksSync } from '$lib/services/networks';
-import { session as wallet } from '$lib/session/core/session.svelte';
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { createManageTokensSession } from '$lib/wallet/core/manage-tokens-session';
-import { shownAddress } from '$lib/multisig/core/shown';
+import { loadCore } from '#lib/core/client.ts';
+import type { IntentReason } from '#lib/core/generated/IntentReason.ts';
+import type { MtokView } from '#lib/core/generated/MtokView.ts';
+import { spaceNetworksSync } from '#lib/services/networks.ts';
+import { session as wallet } from '#lib/session/core/session.svelte.ts';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { createManageTokensSession } from '#lib/wallet/core/manage-tokens-session.ts';
+import { shownAddress } from '#lib/multisig/core/shown.ts';
 
 /** How long the search and the save may each take. */
 const STEP_MS = 30_000;

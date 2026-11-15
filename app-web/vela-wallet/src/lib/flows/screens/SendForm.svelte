@@ -9,10 +9,10 @@
 	 * mode rather than living in three screens that would each need their own
 	 * fee row, summary line and CTA.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import AssetRow from '#lib/wallet/ui/AssetRow.svelte';
 	import AmountInput from '../ui/AmountInput.svelte';
 	import FeeRow from '../ui/FeeRow.svelte';
 	import FeeSpeedRow from '../ui/FeeSpeedRow.svelte';

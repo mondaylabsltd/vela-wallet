@@ -7,8 +7,8 @@
 	 * rows leave as the query narrows, and a transition on a list that changes
 	 * on every keystroke reads as lag rather than as polish.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		placeholder: string;

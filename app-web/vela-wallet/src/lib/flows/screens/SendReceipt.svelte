@@ -11,16 +11,16 @@
 	 * depend on this screen staying open, and a person who thinks it does will
 	 * sit here watching a spinner.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { copyText } from '$lib/services/clipboard';
-	import { shortenAddress } from '$lib/wallet/identity';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { copyText } from '#lib/services/clipboard.ts';
+	import { shortenAddress } from '#lib/wallet/identity.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
 	import StatusHero from '../ui/StatusHero.svelte';
-	import { landingPace } from '$lib/core/kernels';
-	import { trackEntryFor } from '$lib/signing/dapp-receipt';
-	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
+	import { landingPace } from '#lib/core/kernels.ts';
+	import { trackEntryFor } from '#lib/signing/dapp-receipt.ts';
+	import { subscribeTxTracker, txTrackerView } from '#lib/wallet/core/tracker-resident.ts';
 	import type { SendReceiptModel } from '../model';
 
 	interface Props {

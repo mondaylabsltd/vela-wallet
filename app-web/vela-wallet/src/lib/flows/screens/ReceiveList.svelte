@@ -11,9 +11,9 @@
 	import NetworkRow from '../ui/NetworkRow.svelte';
 	import ReceiveHeld from '../ui/ReceiveHeld.svelte';
 	import type { ReceiveListModel } from '../model';
-	import { fill } from '$lib/wallet/messages';
-	import { copyText } from '$lib/services/clipboard';
-	import { track } from '$lib/analytics';
+	import { fill } from '#lib/wallet/messages.ts';
+	import { copyText } from '#lib/services/clipboard.ts';
+	import { track } from '#lib/analytics/index.ts';
 
 	interface Props {
 		model: ReceiveListModel;

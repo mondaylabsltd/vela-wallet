@@ -12,8 +12,8 @@
 	 * somebody is reaching for them, and a control that moves under a thumb is
 	 * how a wrong tap happens. The owner chose the standing blank over that.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		/** The note, or nothing — the line keeps its room either way. */

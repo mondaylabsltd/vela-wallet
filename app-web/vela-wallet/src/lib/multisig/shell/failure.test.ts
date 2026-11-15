@@ -4,7 +4,7 @@
  * kinds (`passkey_check`, `unknown`), plain text is "something went wrong",
  * and a message a shell kept beside a kind is never words.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { failureWords } from './failure';
 import { detailError } from './proposal-failure';

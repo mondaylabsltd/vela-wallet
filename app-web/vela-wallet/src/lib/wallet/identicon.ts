@@ -11,7 +11,7 @@
  * So this calls the same two kernels through the client that already loaded
  * them, and both paths share one placeholder.
  */
-import { identiconNormalizeSeed, identiconSvgCircular } from '$lib/onboarding/core/wasm-client';
+import { identiconNormalizeSeed, identiconSvgCircular } from '#lib/onboarding/core/wasm-client.ts';
 import { IDENTICON_PLACEHOLDER_SVG } from './identicon-placeholder';
 
 export { IDENTICON_PLACEHOLDER_SVG };

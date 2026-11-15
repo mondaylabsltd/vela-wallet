@@ -12,7 +12,7 @@
 	 *   reach — are imported when the person answers yes, not with the layer:
 	 *   it is over every page, and Welcome carries neither (`budgets.e2e.ts`).
 	 */
-	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
+	import PromptSheet from '#lib/ui/onboarding/v2/PromptSheet.svelte';
 	import type { NetworkSpaceMessages } from './messages';
 	import { networkSpace } from './network-space.svelte';
 
@@ -67,7 +67,7 @@
 			networkSpace.switcherOpen = false;
 			if (!switching) return;
 			const space = to;
-			void import('$lib/intents/index.svelte').then(({ intents }) =>
+			void import('#lib/intents/index.svelte.ts').then(({ intents }) =>
 				intents.invoke('person', { type: 'set_network_space', space })
 			);
 		}}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import type { Locale } from '$lib/i18n/locales';
+	import type { Locale } from '#lib/i18n/locales.ts';
 
 	interface Props {
 		locale: Locale;

@@ -13,8 +13,8 @@ const pool = vi.hoisted(() => ({
 	calls: [] as { method: string; params: unknown[]; chainId: number }[],
 	answer: (() => ({})) as (method: string, params: unknown[], chainId: number) => unknown
 }));
-vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+vi.mock('#lib/services/rpc-pool.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/rpc-pool.ts')>()),
 	poolRpcCall: async (method: string, params: unknown[], chainId: number) => {
 		pool.calls.push({ method, params, chainId });
 		return pool.answer(method, params, chainId);

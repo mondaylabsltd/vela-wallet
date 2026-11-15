@@ -4,9 +4,9 @@
  * builders merge it with resolved messages into display-ready view models.
  * Pure data + assembly: no fetching, no URL parsing, no business state.
  */
-import { pluralForm } from '$lib/i18n/plural';
-import { IDENTITY } from '$lib/wallet/fixtures';
-import type { SidebarModel } from '$lib/wallet/model';
+import { pluralForm } from '#lib/i18n/plural.ts';
+import { IDENTITY } from '#lib/wallet/fixtures.ts';
+import type { SidebarModel } from '#lib/wallet/model.ts';
 import type { ExploreMessages } from './messages';
 import type {
 	BrowserModel,

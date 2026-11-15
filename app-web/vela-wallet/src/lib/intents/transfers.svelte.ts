@@ -10,23 +10,23 @@
  */
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
-import { agentSettings } from '$lib/agent/settings.svelte';
-import type { IntentActor } from '$lib/core/generated/IntentActor';
-import type { IntentProgress } from '$lib/core/generated/IntentProgress';
-import { intentOperationProgress } from '$lib/core/client';
-import type { IntentOperation } from '$lib/core/generated/IntentOperation';
-import type { IntentOperationState } from '$lib/core/generated/IntentOperationState';
-import type { IntentReason } from '$lib/core/generated/IntentReason';
-import type { AmountIssue } from '$lib/core/generated/AmountIssue';
-import type { SendView } from '$lib/core/generated/SendView';
-import { sendDesk, type SendDeskPort } from '$lib/flows/send-desk.svelte';
-import { localeOfPath } from '$lib/i18n/locales';
-import { onSignCeremony, type SignCeremonyEvent } from '$lib/onboarding/core/passkey';
-import { networkId } from '$lib/services/networks';
-import { session } from '$lib/session/core/session.svelte';
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { txTrackerView } from '$lib/wallet/core/tracker-resident';
-import { shownAddress } from '$lib/multisig/core/shown';
+import { agentSettings } from '#lib/agent/settings.svelte.ts';
+import type { IntentActor } from '#lib/core/generated/IntentActor.ts';
+import type { IntentProgress } from '#lib/core/generated/IntentProgress.ts';
+import { intentOperationProgress } from '#lib/core/client.ts';
+import type { IntentOperation } from '#lib/core/generated/IntentOperation.ts';
+import type { IntentOperationState } from '#lib/core/generated/IntentOperationState.ts';
+import type { IntentReason } from '#lib/core/generated/IntentReason.ts';
+import type { AmountIssue } from '#lib/core/generated/AmountIssue.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { sendDesk, type SendDeskPort } from '#lib/flows/send-desk.svelte.ts';
+import { localeOfPath } from '#lib/i18n/locales.ts';
+import { onSignCeremony, type SignCeremonyEvent } from '#lib/onboarding/core/passkey.ts';
+import { networkId } from '#lib/services/networks.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { txTrackerView } from '#lib/wallet/core/tracker-resident.ts';
+import { shownAddress } from '#lib/multisig/core/shown.ts';
 
 export type Draft = { chain_id: number; token: string | null; to: string; amount: string };
 export type BatchDraft = {

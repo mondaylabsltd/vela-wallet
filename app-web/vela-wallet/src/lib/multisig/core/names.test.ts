@@ -7,7 +7,7 @@
  * through the store's facade (`known_members`); the order is the core's
  * (`names.label`, its cases in `multisig_rules/names.rs`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
 	startAccounts,
@@ -21,7 +21,7 @@ const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 
 /** The multi-key wallet the index names "Interleave" (§9.1): the one account it answers for. */
 const INTERLEAVE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
-vi.mock('$lib/services/public-key-index', () => ({
+vi.mock('#lib/services/public-key-index.ts', () => ({
 	queryWalletName: async () => null,
 	lookupWalletName: async (a: string) =>
 		a.toLowerCase() === '0x88cca0eedbf2c4426110bbfc998f048689266894' ? { name: 'Interleave' } : null

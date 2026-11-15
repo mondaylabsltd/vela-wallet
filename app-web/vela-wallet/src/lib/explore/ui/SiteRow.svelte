@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import LetterAvatar from '#lib/ui/LetterAvatar.svelte';
 	import type { SiteModel } from '../model';
 
 	interface Props {

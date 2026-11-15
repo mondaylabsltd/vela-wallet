@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { packageBelowFloor } from '$lib/testing/syntax-floor';
+import { packageBelowFloor } from '#lib/testing/syntax-floor.ts';
 
 const APP_ROOT = join(import.meta.dirname, '../../..');
 /**
@@ -127,7 +127,7 @@ describe('the manifest', () => {
 	});
 
 	it('lets its pages reach the usage-statistics endpoint, and run nothing remote', () => {
-		// The wallet's own sender (`$lib/analytics`) POSTs to Rybbit from the
+		// The wallet's own sender (`#lib/analytics/index.ts`) POSTs to Rybbit from the
 		// extension's pages. Rybbit's CORS answer does not name
 		// `chrome-extension:` origins, so it is the host permission for every
 		// site that exempts those pages from CORS; and the pages' CSP sets no

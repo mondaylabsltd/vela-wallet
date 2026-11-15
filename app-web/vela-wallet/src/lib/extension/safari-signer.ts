@@ -1,6 +1,6 @@
 /**
  * The trusted signing page's hand-off, in the Safari package (native AUDIT
- * §6.5) — the same `handOff` (`$lib/signing/page-handoff.svelte.ts`), over a
+ * §6.5) — the same `handOff` (`#lib/signing/page-handoff.svelte.ts`), over a
  * transport Safari can carry.
  *
  * Measured on iOS Safari: a page an extension page opens with `window.open`
@@ -22,7 +22,7 @@
  * the request id, and hands the answer to the core, which accepts only a
  * signature by the account's own key over the bytes it computed itself.
  */
-import type { PageHandoffDeps } from '$lib/signing/page-handoff.svelte';
+import type { PageHandoffDeps } from '#lib/signing/page-handoff.svelte.ts';
 
 /** What of the extension API this needs (Safari's `browser`, also named `chrome`). */
 export interface SafariSignerApi {

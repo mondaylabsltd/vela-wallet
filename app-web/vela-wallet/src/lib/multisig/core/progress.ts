@@ -1,4 +1,4 @@
-import { fillTemplate } from '$lib/i18n/fill';
+import { fillTemplate } from '#lib/i18n/fill.ts';
 import type { MultisigMessages } from '../messages';
 
 /**

@@ -21,9 +21,9 @@
 import { flushSync, tick, untrack } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import '#lib/tokens/tokens.css';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 import FeeRow from './FeeRow.svelte';
 import FeeSpeedRow from './FeeSpeedRow.svelte';
 
@@ -59,31 +59,31 @@ const seams = vi.hoisted(() => {
 	};
 });
 
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	invalidateFeeSignals: seams.invalidate,
 	accountIsDeployed: seams.deployed
 }));
 // `prefs*`: the fee request reads the person's number preset (issue 408), and
 // the preferences store names the core's two readers at import. Never called
 // here — nothing boots the store.
-vi.mock('$lib/core/client', () => ({
+vi.mock('#lib/core/client.ts', () => ({
 	loadCore: vi.fn(async () => {}),
 	prefsMigrations: () => '[]',
 	prefsRead: () => '{}'
 }));
 // The core's bound on a whole quote (`fee_policy::QUOTE_DEADLINE_MS`).
-vi.mock('$lib/core/kernels', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/kernels')>()),
+vi.mock('#lib/core/kernels.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/kernels.ts')>()),
 	feeQuoteDeadlineMs: () => 15_000
 }));
-vi.mock('$lib/flows/core/fee-session', () => ({ createFeeSession: seams.make }));
-vi.mock('$lib/flows/core/send-estimates', () => ({
+vi.mock('#lib/flows/core/fee-session.ts', () => ({ createFeeSession: seams.make }));
+vi.mock('#lib/flows/core/send-estimates.ts', () => ({
 	resolveFee: (fee: { total_wei: string } | null) =>
 		fee === null ? null : { totalWei: fee.total_wei }
 }));
 
-import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
-import { TierPreview } from '$lib/flows/core/tier-preview.svelte';
+import { FeeQuote } from '#lib/flows/core/fee-quote.svelte.ts';
+import { TierPreview } from '#lib/flows/core/tier-preview.svelte.ts';
 
 interface FakeSession {
 	onView: (view: FeeView) => void;

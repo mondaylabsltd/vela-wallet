@@ -14,24 +14,24 @@
 	 */
 	import { onMount } from 'svelte';
 	import type { PageProps } from './$types';
-	import FlowShell from '$lib/ui/onboarding/v2/FlowShell.svelte';
-	import NameScreen from '$lib/ui/onboarding/v2/NameScreen.svelte';
-	import KeysScreen from '$lib/ui/onboarding/v2/KeysScreen.svelte';
-	import ProgressScreen from '$lib/ui/onboarding/v2/ProgressScreen.svelte';
-	import RetryScreen from '$lib/ui/onboarding/v2/RetryScreen.svelte';
-	import DoneScreen from '$lib/ui/onboarding/v2/DoneScreen.svelte';
-	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
-	import { CREATE_FIXTURES, PROMPT_FIXTURES } from '$lib/onboarding/v2-fixtures';
+	import FlowShell from '#lib/ui/onboarding/v2/FlowShell.svelte';
+	import NameScreen from '#lib/ui/onboarding/v2/NameScreen.svelte';
+	import KeysScreen from '#lib/ui/onboarding/v2/KeysScreen.svelte';
+	import ProgressScreen from '#lib/ui/onboarding/v2/ProgressScreen.svelte';
+	import RetryScreen from '#lib/ui/onboarding/v2/RetryScreen.svelte';
+	import DoneScreen from '#lib/ui/onboarding/v2/DoneScreen.svelte';
+	import PromptSheet from '#lib/ui/onboarding/v2/PromptSheet.svelte';
+	import { CREATE_FIXTURES, PROMPT_FIXTURES } from '#lib/onboarding/v2-fixtures.ts';
 	import {
 		progressFor,
 		promptCopy,
 		statusKeyToI18n,
 		submitLabelToI18n
-	} from '$lib/onboarding/core/copy';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { pluralTemplate } from '$lib/i18n/plural';
-	import { loadOnboardingCore } from '$lib/onboarding/core/wasm-client';
-	import { RAIL_STEPS, type RailSlot } from '$lib/ui/onboarding/v2/rail';
+	} from '#lib/onboarding/core/copy.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { pluralTemplate } from '#lib/i18n/plural.ts';
+	import { loadOnboardingCore } from '#lib/onboarding/core/wasm-client.ts';
+	import { RAIL_STEPS, type RailSlot } from '#lib/ui/onboarding/v2/rail.ts';
 
 	let { data }: PageProps = $props();
 

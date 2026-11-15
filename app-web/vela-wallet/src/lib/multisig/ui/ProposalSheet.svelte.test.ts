@@ -13,11 +13,11 @@
  * is the sheet.
  */
 import { tick } from 'svelte';
-import type { SigningMessages } from '$lib/signing/messages';
+import type { SigningMessages } from '#lib/signing/messages.ts';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
+import '#lib/tokens/tokens.css';
+import { identiconViewer } from '#lib/wallet/identicon-viewer.svelte.ts';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const ME = '0x00000000000000000000000000000000000000aa';
@@ -526,7 +526,7 @@ vi.mock('../core/proposal-review.svelte', () => ({
 		dispose() {}
 	}
 }));
-vi.mock('$lib/agent/advice.svelte', () => ({
+vi.mock('#lib/agent/advice.svelte.ts', () => ({
 	sheetBeside: { advice: null },
 	proposalBeside: { publish: () => {}, withdraw: () => {} },
 	openReview: () => null,
@@ -585,17 +585,17 @@ vi.mock('../core/kernel', () => {
 		})
 	};
 });
-vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
-vi.mock('$lib/services/token-provenance', () => ({
+vi.mock('#lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
+vi.mock('#lib/services/token-provenance.ts', () => ({
 	provenanceNote: () => fake.tokenNote
 }));
-vi.mock('$lib/services/networks', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/networks')>()),
+vi.mock('#lib/services/networks.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/networks.ts')>()),
 	nativeSymbol: () => 'xDAI'
 }));
 
 const { default: ProposalSheet } = await import('./ProposalSheet.svelte');
-const { loadCore } = await import('$lib/core/client');
+const { loadCore } = await import('#lib/core/client.ts');
 
 // The links are the core's codec: loaded, as the wallet loads it before any sheet.
 beforeAll(() => loadCore());
@@ -2178,7 +2178,7 @@ describe('why it did not go, in the corpus’ words (r4b-12)', () => {
 		['a passkey prompt that timed out', 'timedOut', 'proposal.reason.passkeyTimedOut'],
 		['a raw error', 'raw', 'proposal.reason.unknown']
 	])('%s', async (_what, kind, words) => {
-		const { PasskeyError } = await import('$lib/onboarding/core/passkey');
+		const { PasskeyError } = await import('#lib/onboarding/core/passkey.ts');
 		fake.approveError =
 			kind === 'raw'
 				? new Error('genesis service unavailable: Unexpected token o')
@@ -2207,7 +2207,7 @@ describe('why it did not go, in the corpus’ words (r4b-12)', () => {
 		expect(text).toContain('proposal.reason.offline');
 		expect(text).not.toContain('authority.signUnchecked');
 		// The person's own choice is still said as itself.
-		const { PasskeyError } = await import('$lib/onboarding/core/passkey');
+		const { PasskeyError } = await import('#lib/onboarding/core/passkey.ts');
 		fake.approveError = new PasskeyError('cancelled', 'closed', false);
 		press('proposal.approve');
 		await settle();

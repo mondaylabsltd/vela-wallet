@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import LetterAvatar from '#lib/ui/LetterAvatar.svelte';
 	import type { TileModel } from '../model';
 
 	interface Props {

@@ -4,8 +4,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('$app/environment', () => ({ browser: true }));
-vi.mock('$lib/core/client', () => ({
+vi.mock('$app/env', () => ({ browser: true }));
+vi.mock('#lib/core/client.ts', () => ({
 	loadCore: async () => {},
 	clientmcpInstallationId: () => 'install-1',
 	clientmcpLinkBegin: () =>

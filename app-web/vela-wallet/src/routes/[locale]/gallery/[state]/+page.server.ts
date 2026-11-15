@@ -12,20 +12,20 @@ import {
 	resolveSigningMessages,
 	resolveSettingsMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { toLocale } from '$lib/i18n/locales';
+} from '#lib/i18n/engine.server.ts';
+import { toLocale } from '#lib/i18n/locales.ts';
 import {
 	buildDesktopState,
 	buildMobileState,
 	DESKTOP_STATES,
 	MOBILE_STATES
-} from '$lib/wallet/fixtures';
+} from '#lib/wallet/fixtures.ts';
 import {
 	buildDesktopState as buildContactsDesktopState,
 	buildMobileState as buildContactsMobileState,
 	DESKTOP_STATES as CONTACTS_DESKTOP_STATES,
 	MOBILE_STATES as CONTACTS_MOBILE_STATES
-} from '$lib/contacts/fixtures';
+} from '#lib/contacts/fixtures.ts';
 import {
 	buildDesktopFlowState,
 	buildDesktopScan,
@@ -33,37 +33,37 @@ import {
 	buildMobileScan,
 	DESKTOP_FLOW_STATES,
 	MOBILE_FLOW_STATES
-} from '$lib/flows/fixtures';
-import { identiconSvgFor } from '$lib/wallet/identicon.server';
-import type { DesktopStateId, MobileStateId } from '$lib/wallet/model';
-import type { DesktopContactsStateId, MobileContactsStateId } from '$lib/contacts/model';
-import type { DesktopFlowStateId, FlowStateId } from '$lib/flows/model';
+} from '#lib/flows/fixtures.ts';
+import { identiconSvgFor } from '#lib/wallet/identicon.server.ts';
+import type { DesktopStateId, MobileStateId } from '#lib/wallet/model.ts';
+import type { DesktopContactsStateId, MobileContactsStateId } from '#lib/contacts/model.ts';
+import type { DesktopFlowStateId, FlowStateId } from '#lib/flows/model.ts';
 import {
 	buildDesktopState as buildExploreDesktopState,
 	buildMobileState as buildExploreMobileState,
 	DESKTOP_STATES as EXPLORE_DESKTOP_STATES,
 	exploreSidebar,
 	MOBILE_STATES as EXPLORE_MOBILE_STATES
-} from '$lib/explore/fixtures';
-import { ALL_STATES as SIGNING_STATES, buildSigningState } from '$lib/signing/fixtures';
-import { buildHandoffState, HANDOFF_STATES, type HandoffStateId } from '$lib/signing/handoff';
+} from '#lib/explore/fixtures.ts';
+import { ALL_STATES as SIGNING_STATES, buildSigningState } from '#lib/signing/fixtures.ts';
+import { buildHandoffState, HANDOFF_STATES, type HandoffStateId } from '#lib/signing/handoff.ts';
 import {
 	buildVerdictState,
 	VERDICT_STATES,
 	verdictBoardOver,
 	type VerdictStateId
-} from '$lib/signing/verdict-boards';
-import type { ExploreDesktopStateId, ExploreStateId } from '$lib/explore/model';
-import type { SigningStateId } from '$lib/signing/model';
+} from '#lib/signing/verdict-boards.ts';
+import type { ExploreDesktopStateId, ExploreStateId } from '#lib/explore/model.ts';
+import type { SigningStateId } from '#lib/signing/model.ts';
 import {
 	buildDesktopState as buildSettingsDesktopState,
 	buildMobileState as buildSettingsMobileState,
 	DESKTOP_STATES as SETTINGS_DESKTOP_STATES,
 	MOBILE_STATES as SETTINGS_MOBILE_STATES
-} from '$lib/settings/fixtures';
-import type { DesktopSettingsStateId, MobileSettingsStateId } from '$lib/settings/model';
-import type { WalletFlowMessages } from '$lib/flows/messages';
-import type { ScanNoticeMessages } from '$lib/flows/core/scanner.svelte';
+} from '#lib/settings/fixtures.ts';
+import type { DesktopSettingsStateId, MobileSettingsStateId } from '#lib/settings/model.ts';
+import type { WalletFlowMessages } from '#lib/flows/messages.ts';
+import type { ScanNoticeMessages } from '#lib/flows/core/scanner.svelte.ts';
 import type { EntryGenerator, PageServerLoad } from './$types';
 
 /**

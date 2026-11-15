@@ -19,9 +19,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import en from '../../../../../../../assets/i18n/en.json';
-import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
 import AddMethodPicker from './AddMethodPicker.svelte';
 
 const strings = (key: string, params?: Record<string, string | number>): string => {

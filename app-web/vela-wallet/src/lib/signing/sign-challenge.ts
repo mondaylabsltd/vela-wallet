@@ -47,15 +47,15 @@ import {
 	trustedSignerSignatureAccept,
 	trustedSignerSignatureRequest,
 	type TrustedSignerKey
-} from '$lib/core/kernels';
-import type { KeyMethod } from '$lib/core/generated/KeyMethod';
-import type { PageFailure } from '$lib/core/generated/PageFailure';
-import type { KeyRoute } from '$lib/core/generated/KeyRoute';
-import type { VenueBlock } from '$lib/core/generated/VenueBlock';
-import { cancelSign, sign, signWithAny, type Assertion } from '$lib/onboarding/core/passkey';
-import { loadAccounts } from '$lib/onboarding/core/storage';
-import { chainName, nativeSymbol } from '$lib/services/networks';
-import { AskerGoneError } from '$lib/signing/core/sign-types';
+} from '#lib/core/kernels.ts';
+import type { KeyMethod } from '#lib/core/generated/KeyMethod.ts';
+import type { PageFailure } from '#lib/core/generated/PageFailure.ts';
+import type { KeyRoute } from '#lib/core/generated/KeyRoute.ts';
+import type { VenueBlock } from '#lib/core/generated/VenueBlock.ts';
+import { cancelSign, sign, signWithAny, type Assertion } from '#lib/onboarding/core/passkey.ts';
+import { loadAccounts } from '#lib/onboarding/core/storage.ts';
+import { chainName, nativeSymbol } from '#lib/services/networks.ts';
+import { AskerGoneError } from '#lib/signing/core/sign-types.ts';
 import {
 	handOff,
 	pageHandoff,

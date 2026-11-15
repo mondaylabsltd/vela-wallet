@@ -7,9 +7,9 @@
 	 * that ONE address serves every network, so the fastest path is to copy it
 	 * from whichever line you happened to look at, without opening anything.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import RemoteLogo from '#lib/wallet/ui/RemoteLogo.svelte';
 	import type { NetworkRowModel } from '../model';
 
 	interface Props {

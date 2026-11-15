@@ -6,8 +6,8 @@
 	 * to ask which one first.
 	 */
 	import type { RpcBannerModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import ChainMark from './ChainMark.svelte';
 
 	interface Props {

@@ -61,7 +61,7 @@
  * whose content a person can choose: a custom network's display name reaches
  * `unreachable`, and somebody can name a network after its own RPC URL.
  */
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
 import { fetchWithTimeout, NET_TIMEOUTS, isTimeoutError } from './net';
 
 /**

@@ -30,15 +30,15 @@
  * would type-check against a native module that does not exist.
  */
 
-import { onPoolOutOfReach } from '$lib/services/rpc-pool';
-import { getItem } from '$lib/services/storage';
+import { onPoolOutOfReach } from '#lib/services/rpc-pool.ts';
+import { getItem } from '#lib/services/storage.ts';
 
 import { toApiToken } from './balance-executor';
 import { createBalanceSession } from './balance-session';
 import { BALANCE_PRIVACY_KEY } from './balance-types';
-import type { BalanceEvent } from '$lib/core/generated/BalanceEvent';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { APIToken } from '$lib/services/tokens-model';
+import type { BalanceEvent } from '#lib/core/generated/BalanceEvent.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { APIToken } from '#lib/services/tokens-model.ts';
 
 /**
  * The persisted privacy byte. On web this module is the ONLY hydrate: the core

@@ -3,13 +3,13 @@
  * the drawn ActivityGroupModel; the shell only words and formats.
  */
 import { describe, expect, it } from 'vitest';
-import type { FeedDapp } from '$lib/core/generated/FeedDapp';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedRow } from '$lib/core/generated/FeedRow';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
-import { chainName } from '$lib/services/networks';
-import { preferences } from '$lib/services/preferences.svelte';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { FeedDapp } from '#lib/core/generated/FeedDapp.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedRow } from '#lib/core/generated/FeedRow.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import { chainName } from '#lib/services/networks.ts';
+import { preferences } from '#lib/services/preferences.svelte.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
 import {
@@ -22,7 +22,7 @@ import {
 	middleCut
 } from './live';
 import type { ActivityTitlePart } from './model';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { withFigureMaskable } from './testing/figure-maskable';
 
 const m = resolveWalletMessages('en');

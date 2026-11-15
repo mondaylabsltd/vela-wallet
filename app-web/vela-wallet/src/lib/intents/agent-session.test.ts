@@ -9,11 +9,11 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initSync, intentCheck } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import type { IntentAction } from '$lib/core/generated/IntentAction';
-import type { IntentCheck } from '$lib/core/generated/IntentCheck';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { SessionView } from '$lib/session/generated/SessionView';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+import type { IntentCheck } from '#lib/core/generated/IntentCheck.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { SessionView } from '#lib/session/generated/SessionView.ts';
 
 const ceremony: { listener: ((event: 'started' | 'signed' | 'failed') => void) | null } = {
 	listener: null
@@ -23,7 +23,7 @@ const MINE = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
-vi.mock('$lib/wallet/core/balance.svelte', () => ({
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({
 	balance: {
 		view: {
 			address: MINE,
@@ -35,20 +35,20 @@ vi.mock('$lib/wallet/core/balance.svelte', () => ({
 		settledFor: () => true
 	}
 }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { address: MINE } } }));
-vi.mock('$lib/wallet/core/tracker-resident', () => ({ txTrackerView: () => tracker }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('#lib/session/core/session.svelte.ts', () => ({ session: { view: { address: MINE } } }));
+vi.mock('#lib/wallet/core/tracker-resident.ts', () => ({ txTrackerView: () => tracker }));
+vi.mock('#lib/services/networks.ts', () => ({
 	networkId: (chain: number) => `net-${chain}`,
 	getAllNetworksSync: () => []
 }));
-vi.mock('$lib/onboarding/core/passkey', () => ({
+vi.mock('#lib/onboarding/core/passkey.ts', () => ({
 	onSignCeremony: (listener: (event: 'started' | 'signed' | 'failed') => void) => {
 		ceremony.listener = listener;
 		return () => {};
 	}
 }));
 
-const { sendDesk } = await import('$lib/flows/send-desk.svelte');
+const { sendDesk } = await import('#lib/flows/send-desk.svelte.ts');
 const { transfers, REVIEW_SETTLE_MS } = await import('./transfers.svelte');
 
 /** The transfers' clock, moved on by hand: the person has looked the review over. */

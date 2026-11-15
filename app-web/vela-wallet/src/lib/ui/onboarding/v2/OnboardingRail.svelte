@@ -21,7 +21,7 @@
 	 *
 	 * The desktop app renders the same rail from `ui/rail.rs`.
 	 */
-	import BrandMark from '$lib/ui/BrandMark.svelte';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
 	import type { RailSlot } from './rail';
 
 	// NOT `slot`: that is a reserved attribute name in Svelte, and a prop

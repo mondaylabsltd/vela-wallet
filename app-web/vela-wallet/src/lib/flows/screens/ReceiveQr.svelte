@@ -6,18 +6,18 @@
 	 * desktop. The only difference between R2 and R3 is the contract line —
 	 * a named asset has one, a network does not.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import Switch from '$lib/ui/Switch.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import Switch from '#lib/ui/Switch.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import AddressCard from '../ui/AddressCard.svelte';
 	import QRCard from '../ui/QRCard.svelte';
 	import ReceiveHeld from '../ui/ReceiveHeld.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
-	import { copyText } from '$lib/services/clipboard';
-	import { track } from '$lib/analytics';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
+	import { copyText } from '#lib/services/clipboard.ts';
+	import { track } from '#lib/analytics/index.ts';
 	import { saveShareImage } from '../share-image';
-	import { shortenAddress } from '$lib/wallet/identity';
+	import { shortenAddress } from '#lib/wallet/identity.ts';
 	import type { ReceiveQrModel } from '../model';
 
 	interface Props {

@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
+import { SUPPORTED_LOCALES, toLocale } from '#lib/i18n/locales.ts';
 import type { EntryGenerator, PageServerLoad } from './$types';
 
 /**

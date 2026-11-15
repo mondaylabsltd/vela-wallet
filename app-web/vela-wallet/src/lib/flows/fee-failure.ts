@@ -14,7 +14,7 @@
  *   with nothing behind it is no control at all. A row that said one and did
  *   the other was a control that lied.
  */
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
 
 /**
  * The failure a surface asking about `chainId` may draw — the core's

@@ -24,25 +24,25 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { SessionAccountRow } from '#lib/core/generated/SessionAccountRow.ts';
 import {
 	resolveContactsMessages,
 	resolveSettingsMessages,
 	resolveWalletFlowMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { liveContactDetail } from '$lib/contacts/live';
-import { buildFlowState } from '$lib/flows/fixtures';
-import { withLiveFlow } from '$lib/flows/live';
+} from '#lib/i18n/engine.server.ts';
+import { liveContactDetail } from '#lib/contacts/live.ts';
+import { buildFlowState } from '#lib/flows/fixtures.ts';
+import { withLiveFlow } from '#lib/flows/live.ts';
 import {
 	buildDesktopState as buildSettingsDesktopState,
 	buildMobileState as buildSettingsMobileState
-} from '$lib/settings/fixtures';
+} from '#lib/settings/fixtures.ts';
 import {
 	liveAccountsSheet,
 	liveBalanceDetail,
@@ -51,7 +51,7 @@ import {
 	withLiveAccounts,
 	withLiveAccountsDesktop,
 	type LiveAccountsInput
-} from '$lib/settings/live';
+} from '#lib/settings/live.ts';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import {
 	liveActivityGroups,
@@ -63,28 +63,28 @@ import {
 	withLiveWalletDesktop
 } from './live';
 import { liveTxDetail } from './live-detail';
-import type { BatchView } from '$lib/core/generated/BatchView';
-import type { ClearSignField } from '$lib/core/generated/ClearSignField';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { SignView } from '$lib/core/generated/SignView';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
-import { liveBatchImport } from '$lib/flows/live-batch';
+import type { BatchView } from '#lib/core/generated/BatchView.ts';
+import type { ClearSignField } from '#lib/core/generated/ClearSignField.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { IDLE_FEE_VIEW } from '#lib/flows/core/fee-quote.svelte.ts';
+import { liveBatchImport } from '#lib/flows/live-batch.ts';
 import {
 	liveSendConfirm,
 	liveSendForm,
 	liveSendPick,
 	type SendLiveInputs
-} from '$lib/flows/live-send';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
-import { buildSigningModel, type SigningLiveInputs } from '$lib/signing/live';
-import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from '$lib/signing/core/sheet.svelte';
-import { INITIAL_SIGN_VIEW } from '$lib/signing/core/sign-resident.svelte';
+} from '#lib/flows/live-send.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { buildSigningModel, type SigningLiveInputs } from '#lib/signing/live.ts';
+import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from '#lib/signing/core/sheet.svelte.ts';
+import { INITIAL_SIGN_VIEW } from '#lib/signing/core/sign-resident.svelte.ts';
 import { SEND_BASE } from './testing/send-view';
 import {
 	COMMITTED,

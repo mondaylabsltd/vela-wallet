@@ -12,12 +12,12 @@
  * a cancel; an answer from another origin, or over a challenge the page was
  * not allowed to sign, is refused — nothing reaches the machine.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { pageHandoff, type PageHandoffDeps } from '$lib/signing/page-handoff.svelte';
+import { pageHandoff, type PageHandoffDeps } from '#lib/signing/page-handoff.svelte.ts';
 import { createOnboardingExecutor, operationFailure, type OnboardingEffect } from './executor';
 import { setCeremonyHandoffDeps } from './page-ceremony';
 import type { ShellOperation } from '../generated/ShellOperation';

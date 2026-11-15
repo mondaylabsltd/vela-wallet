@@ -3,8 +3,8 @@
  * resolved at build time like every other page's (`engine.server.ts`).
  * Templates keep their `{{name}}` slots; `fillTemplate` fills them.
  */
-import type { PluralCopy } from '$lib/i18n/plural';
-import { PRODUCTION_WRITE_REFUSED_ENGLISH } from '$lib/core/generated/serviceDefaults';
+import type { PluralCopy } from '#lib/i18n/plural.ts';
+import { PRODUCTION_WRITE_REFUSED_ENGLISH } from '#lib/core/generated/serviceDefaults.ts';
 
 /**
  * r18-8: "This test build won't write to the live service; point it at a
@@ -28,7 +28,7 @@ export interface MultisigMessages {
 	 * signing page — the apps' card, in the corpus' words
 	 * (`resolveHandoffMessages`). Absent in fixtures that draw no hand-off.
 	 */
-	handoff?: import('$lib/signing/messages').HandoffMessages;
+	handoff?: import('#lib/signing/messages.ts').HandoffMessages;
 	/**
 	 * r18-8 (§28, §32): this test build refused to write to the live service —
 	 * `common.testBuild.productionWriteRefused`, resolved beside the multisig

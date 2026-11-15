@@ -14,14 +14,14 @@ import {
 	resolveSettingsMessages,
 	resolveSigningMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
-import { buildDesktopState, buildMobileState } from '$lib/settings/fixtures';
-import { EMPTY_ACCOUNT } from '$lib/settings/identity';
-import { webNavItems } from '$lib/wallet/destinations';
-import { buildDesktopState as buildWalletDesktopState } from '$lib/wallet/fixtures';
-import { identiconSvgFor } from '$lib/wallet/identicon.server';
-import { EMPTY_HEADER } from '$lib/wallet/identity';
+} from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES, toLocale } from '#lib/i18n/locales.ts';
+import { buildDesktopState, buildMobileState } from '#lib/settings/fixtures.ts';
+import { EMPTY_ACCOUNT } from '#lib/settings/identity.ts';
+import { webNavItems } from '#lib/wallet/destinations.ts';
+import { buildDesktopState as buildWalletDesktopState } from '#lib/wallet/fixtures.ts';
+import { identiconSvgFor } from '#lib/wallet/identicon.server.ts';
+import { EMPTY_HEADER } from '#lib/wallet/identity.ts';
 import type { EntryGenerator, PageServerLoad } from './$types';
 
 export const entries: EntryGenerator = () => SUPPORTED_LOCALES.map((locale) => ({ locale }));

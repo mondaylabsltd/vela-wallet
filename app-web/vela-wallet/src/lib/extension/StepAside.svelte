@@ -11,7 +11,7 @@
 	 * closes nothing. A dApp's request still rises over it in the panel (the
 	 * layout lifts this while one is owed).
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 
 	interface Props {
 		title: string;

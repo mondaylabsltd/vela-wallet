@@ -32,18 +32,18 @@
  * converted into the result variant that operation answers with.
  */
 
-import { chainName } from '$lib/services/networks';
-import { getLogsRangeCap, poolRpcCall } from '$lib/services/rpc-pool';
-import { loadCustomTokens, saveCustomToken } from '$lib/services/records';
-import { resolveTokenMetadata } from '$lib/services/token-metadata';
-import { clearTokenCache } from '$lib/services/wallet-api';
-import type { CustomToken } from '$lib/services/tokens-model';
+import { chainName } from '#lib/services/networks.ts';
+import { getLogsRangeCap, poolRpcCall } from '#lib/services/rpc-pool.ts';
+import { loadCustomTokens, saveCustomToken } from '#lib/services/records.ts';
+import { resolveTokenMetadata } from '#lib/services/token-metadata.ts';
+import { clearTokenCache } from '#lib/services/wallet-api.ts';
+import type { CustomToken } from '#lib/services/tokens-model.ts';
 
-import type { TrustCustomToken } from '$lib/core/generated/TrustCustomToken';
-import type { TrustMetaEntry } from '$lib/core/generated/TrustMetaEntry';
-import type { TrustRawLog } from '$lib/core/generated/TrustRawLog';
-import type { TrustLogsOutcome } from '$lib/core/generated/TrustLogsOutcome';
-import type { TrustShellResult } from '$lib/core/generated/TrustShellResult';
+import type { TrustCustomToken } from '#lib/core/generated/TrustCustomToken.ts';
+import type { TrustMetaEntry } from '#lib/core/generated/TrustMetaEntry.ts';
+import type { TrustRawLog } from '#lib/core/generated/TrustRawLog.ts';
+import type { TrustLogsOutcome } from '#lib/core/generated/TrustLogsOutcome.ts';
+import type { TrustShellResult } from '#lib/core/generated/TrustShellResult.ts';
 import type { TrustEffect } from './token-trust-types';
 
 /**

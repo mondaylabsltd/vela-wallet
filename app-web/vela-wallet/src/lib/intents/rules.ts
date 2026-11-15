@@ -11,12 +11,12 @@ import {
 	intentShows,
 	intentVerdict,
 	intentWorldNeeds
-} from '$lib/core/client';
-import type { IntentAction } from '$lib/core/generated/IntentAction';
-import type { IntentScreen } from '$lib/core/generated/IntentScreen';
-import type { IntentBaseline } from '$lib/core/generated/IntentBaseline';
-import type { IntentExamined } from '$lib/core/generated/IntentExamined';
-import type { IntentVerdict } from '$lib/core/generated/IntentVerdict';
+} from '#lib/core/client.ts';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
+import type { IntentBaseline } from '#lib/core/generated/IntentBaseline.ts';
+import type { IntentExamined } from '#lib/core/generated/IntentExamined.ts';
+import type { IntentVerdict } from '#lib/core/generated/IntentVerdict.ts';
 import { worldJson, type World } from './world';
 
 export type Examined = IntentExamined;

@@ -3,26 +3,26 @@
  * and `FeeView`, and nothing else. Every assertion here is "the core said so".
  */
 import { describe, expect, it } from 'vitest';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
-import { FeeSpeedCore } from '$lib/core/client';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeeSpeedEvent } from '#lib/core/generated/FeeSpeedEvent.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
+import { FeeSpeedCore } from '#lib/core/client.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
 import {
 	resolveMultisigMessages,
 	resolveWalletFlowMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import type { WalletIdentity } from '$lib/wallet/identity';
-import { shortenAddress } from '$lib/wallet/identity';
-import { chainName } from '$lib/services/networks';
-import { fill } from '$lib/wallet/messages';
-import { liveAssetRow, MONEY_PENDING, sentAmountText } from '$lib/wallet/live';
-import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
+} from '#lib/i18n/engine.server.ts';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
+import { chainName } from '#lib/services/networks.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { liveAssetRow, MONEY_PENDING, sentAmountText } from '#lib/wallet/live.ts';
+import { COMMITTED, expectWithheld, ON_ITS_WAY } from '#lib/wallet/testing/fiat-withheld.ts';
 import { buildFlowState } from './fixtures';
 import { chainMark, tokenMarkFor } from './marks';
 import { wouldFailView } from './testing/fee-core';
@@ -3202,7 +3202,7 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 describe('hidden balance: Send keeps its figures', () => {
 	it('the picker shows every holding of the hidden fixture', async () => {
 		const { readFileSync } = await import('node:fs');
-		const { toApiToken } = await import('$lib/wallet/core/balance-executor');
+		const { toApiToken } = await import('#lib/wallet/core/balance-executor.ts');
 		const { toSendToken } = await import('./core/send-types');
 		const fixture = JSON.parse(
 			readFileSync('../../rust/crates/vela-core/tests/fixtures/privacy-hidden.json', 'utf8')

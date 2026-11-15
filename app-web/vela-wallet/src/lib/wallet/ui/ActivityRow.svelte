@@ -2,7 +2,7 @@
 	import type { ActivityRowModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
-	import AddressText from '$lib/ui/AddressText.svelte';
+	import AddressText from '#lib/ui/AddressText.svelte';
 	import RemoteLogo from './RemoteLogo.svelte';
 
 	interface Props {

@@ -5,19 +5,19 @@
  * itself USDC, WETH's mainnet address on Gnosis — and the sheet is built from
  * its view. The core decides; these tests hold the drawing to it.
  */
-import { judgedByFreshMachine, simOutcome } from '$lib/core/kernels';
+import { judgedByFreshMachine, simOutcome } from '#lib/core/kernels.ts';
 import { witnessed } from './sim-witnessed';
 import type { SimEnded } from './verdict';
 import { describe, expect, it } from 'vitest';
-import type { ClearOperation } from '$lib/core/generated/ClearOperation';
-import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
-import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { SignView } from '$lib/core/generated/SignView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import { ClearSigningCore } from '$lib/core/client';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { fill } from '$lib/wallet/messages';
+import type { ClearOperation } from '#lib/core/generated/ClearOperation.ts';
+import type { ClearShellResult } from '#lib/core/generated/ClearShellResult.ts';
+import type { ClearSigningEvent } from '#lib/core/generated/ClearSigningEvent.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import { ClearSigningCore } from '#lib/core/client.ts';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import { toClearLocale } from './core/clear-types';
 import { INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
+	import LetterAvatar from '#lib/ui/LetterAvatar.svelte';
 	import type { MenuItemModel, SiteMarkModel, SiteModel } from '../model';
 	import SiteMark from './SiteMark.svelte';
 

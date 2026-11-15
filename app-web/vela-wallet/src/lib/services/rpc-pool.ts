@@ -13,7 +13,7 @@
  * fastest-RPC winners are facts about the network every caller shares.
  */
 
-import { loadCore } from '$lib/core/client';
+import { loadCore } from '#lib/core/client.ts';
 import {
 	poolShouldFault,
 	rpcLatencyMs,
@@ -30,12 +30,12 @@ import {
 	type CollectedEndpoint,
 	type RPCResponse
 } from './rpc-pool-endpoints';
-import { readStoredBans } from '$lib/wallet/core/rpc-pool-executor';
-import { createRpcPoolSession, type RpcPoolSession } from '$lib/wallet/core/rpc-pool-session';
-import type { RpcCallVerdict } from '$lib/core/generated/RpcCallVerdict';
-import type { RpcKind } from '$lib/core/generated/RpcKind';
-import type { RpcPoolView } from '$lib/core/generated/RpcPoolView';
-import type { RpcPoolCallRegistry } from '$lib/wallet/core/rpc-pool-types';
+import { readStoredBans } from '#lib/wallet/core/rpc-pool-executor.ts';
+import { createRpcPoolSession, type RpcPoolSession } from '#lib/wallet/core/rpc-pool-session.ts';
+import type { RpcCallVerdict } from '#lib/core/generated/RpcCallVerdict.ts';
+import type { RpcKind } from '#lib/core/generated/RpcKind.ts';
+import type { RpcPoolView } from '#lib/core/generated/RpcPoolView.ts';
+import type { RpcPoolCallRegistry } from '#lib/wallet/core/rpc-pool-types.ts';
 
 export { getBuiltinBundlerUrl, getLogsRangeCap } from './rpc-pool-endpoints';
 

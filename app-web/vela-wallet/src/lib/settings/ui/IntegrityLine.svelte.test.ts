@@ -14,9 +14,9 @@
 import { tick } from 'svelte';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import { signerIntegrityTime } from '$lib/core/kernels';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
+import { signerIntegrityTime } from '#lib/core/kernels.ts';
 import en from '../../../../../../assets/i18n/en.json';
 import ja from '../../../../../../assets/i18n/ja.json';
 import zh from '../../../../../../assets/i18n/zh.json';

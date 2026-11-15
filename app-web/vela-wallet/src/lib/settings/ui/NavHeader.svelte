@@ -4,8 +4,8 @@
 	 * (ST9/ST9b/ST10/ST12/ST13/ST14). The desktop panels reuse the title
 	 * pair without the arrow, which is what `back={false}` is for.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		title: string;

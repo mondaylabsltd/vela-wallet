@@ -9,13 +9,13 @@
  * Nothing here can reach a production service: the guard's inner `fetch`
  * answers on this machine, and a write to a production host never gets to it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { productionWriteVerdict } from '../../../../../../rust/pkg-web/vela_core.js';
-import { MultisigAccountsCore } from '$lib/core/client';
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
-import { guardFetch, type Decide, type WriteVerdict } from '$lib/services/production-guard';
+import { MultisigAccountsCore } from '#lib/core/client.ts';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
+import { guardFetch, type Decide, type WriteVerdict } from '#lib/services/production-guard.ts';
 import type { MultisigAccountsEvent } from '../generated/MultisigAccountsEvent';
 import type { MultisigAccountsView } from '../generated/MultisigAccountsView';
 import { memoryStorage, offlineDeps, settled } from './accounts.testing';

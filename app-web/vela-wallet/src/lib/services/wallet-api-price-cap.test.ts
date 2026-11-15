@@ -8,7 +8,7 @@
  * The wire, the registry document and the price seams are mocked; the
  * orchestration is the real code.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const price = vi.hoisted(() => ({
@@ -123,7 +123,7 @@ describe('Ethereum’s price read never holds the chains (perf-5)', () => {
 	});
 
 	it('r4D-18, spec 105: the testnet space prices nothing, so reads no price feed', async () => {
-		const { networkSpace } = await import('$lib/network-space/network-space.svelte');
+		const { networkSpace } = await import('#lib/network-space/network-space.svelte.ts');
 		networkSpace.set('testnet');
 		try {
 			price.asked = 0;

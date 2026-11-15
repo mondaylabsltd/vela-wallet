@@ -11,10 +11,10 @@
  * Not cached: it is asked when a person opens one page, and the founding set of
  * a wallet that was just created is exactly the thing a cache would get wrong.
  */
-import { loadCore, walletKeysStep } from '$lib/core/client';
-import { signingPlan } from '$lib/core/kernels';
-import type { Account } from '$lib/core/generated/Account';
-import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
+import { loadCore, walletKeysStep } from '#lib/core/client.ts';
+import { signingPlan } from '#lib/core/kernels.ts';
+import type { Account } from '#lib/core/generated/Account.ts';
+import type { CreateKeyRow } from '#lib/onboarding/generated/CreateKeyRow.ts';
 import { runWalk } from './core-walk';
 
 /**

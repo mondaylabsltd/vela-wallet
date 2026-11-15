@@ -11,12 +11,12 @@
  * the executor's in-flight coalescing is what keeps two legs touching the same
  * token from printing two rows that disagree.
  */
-import { ClearSigningCore } from '$lib/core/client';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
-import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
+import { ClearSigningCore } from '#lib/core/client.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { ClearShellResult } from '#lib/core/generated/ClearShellResult.ts';
+import type { ClearSigningEvent } from '#lib/core/generated/ClearSigningEvent.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
 import { clearOperationFailure, executeClearOperation } from './clear-executor';
 import type { ClearEffect, ClearSigningSessionOptions } from './clear-types';
 

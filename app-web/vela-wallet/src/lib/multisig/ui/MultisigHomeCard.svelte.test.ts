@@ -12,11 +12,11 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import { proposals, type ChainState } from '../core/proposals.svelte';
 import { multisig, type MultisigAccount } from '../core/store.svelte';
-import { loadCore } from '$lib/core/client';
+import { loadCore } from '#lib/core/client.ts';
 import {
 	memoryStorage,
 	offlineDeps,

@@ -4,8 +4,8 @@
 	 * 高级. 高级 is the one that collapses (ST1b), so the chevron is optional
 	 * and the whole label becomes a button only when it is present.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		label: string;

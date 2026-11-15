@@ -3,7 +3,7 @@
  * sheet's own maths, so the two answer a finger the same way.
  */
 import { describe, expect, it } from 'vitest';
-import { FLICK_VELOCITY, SLOP } from '$lib/wallet/ui/sheet-gesture';
+import { FLICK_VELOCITY, SLOP } from '#lib/wallet/ui/sheet-gesture.ts';
 import {
 	clampPan,
 	clampScale,

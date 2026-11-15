@@ -15,7 +15,7 @@
 	import { toastAnchor } from './report-toast.svelte';
 	import type { SettingsPrefEvent } from './pref-events';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
-	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
+	import type { NetEndpointField } from '#lib/core/generated/NetEndpointField.ts';
 
 	import type {
 		AgentPanelModel,
@@ -27,9 +27,9 @@
 		SettingsPageId,
 		SwitchRowModel
 	} from './model';
-	import type { SidebarModel } from '$lib/wallet/model';
-	import Button from '$lib/ui/Button.svelte';
-	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
+	import type { SidebarModel } from '#lib/wallet/model.ts';
+	import Button from '#lib/ui/Button.svelte';
+	import Sidebar from '#lib/wallet/ui/Sidebar.svelte';
 	import AboutPanel from './ui/AboutPanel.svelte';
 	import AgentPanel from './ui/AgentPanel.svelte';
 	import KeysBlock from './ui/KeysBlock.svelte';
@@ -42,8 +42,8 @@
 	import Dropdown from './ui/Dropdown.svelte';
 	import EndpointsPanel from './ui/EndpointsPanel.svelte';
 	import FormRow from './ui/FormRow.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import NetworkDetailPanel from './ui/NetworkDetailPanel.svelte';
 	import NetworksPanel from './ui/NetworksPanel.svelte';
 	import RpcBanner from './ui/RpcBanner.svelte';

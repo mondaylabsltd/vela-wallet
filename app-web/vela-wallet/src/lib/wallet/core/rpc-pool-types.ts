@@ -1,12 +1,12 @@
 // Ported from src/services/wallet-state-core/rpc-pool-types.ts @ c13e89d4
-// (spec 025). One module per machine; the generic options live in $lib/core.
+// (spec 025). One module per machine; the generic options live in #lib/core.
 
-import type { RpcCallVerdict } from '$lib/core/generated/RpcCallVerdict';
-import type { RpcKind } from '$lib/core/generated/RpcKind';
-import type { RpcOperation } from '$lib/core/generated/RpcOperation';
-import type { RpcPoolView } from '$lib/core/generated/RpcPoolView';
-import type { CollectedEndpoint, RPCResponse } from '$lib/services/rpc-pool-endpoints';
-import type { SessionOptions } from '$lib/core/types';
+import type { RpcCallVerdict } from '#lib/core/generated/RpcCallVerdict.ts';
+import type { RpcKind } from '#lib/core/generated/RpcKind.ts';
+import type { RpcOperation } from '#lib/core/generated/RpcOperation.ts';
+import type { RpcPoolView } from '#lib/core/generated/RpcPoolView.ts';
+import type { CollectedEndpoint, RPCResponse } from '#lib/services/rpc-pool-endpoints.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type RpcPoolEffect = { id: number; operation: RpcOperation };

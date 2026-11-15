@@ -11,9 +11,9 @@
  * with `scan_due` and the page as it stands then. One check at a time is the
  * core's too.
  */
-import type { FeedNextScan } from '$lib/core/generated/FeedNextScan';
-import type { FeedPresence } from '$lib/core/generated/FeedPresence';
-import type { FeedPresenceChange } from '$lib/core/generated/FeedPresenceChange';
+import type { FeedNextScan } from '#lib/core/generated/FeedNextScan.ts';
+import type { FeedPresence } from '#lib/core/generated/FeedPresence.ts';
+import type { FeedPresenceChange } from '#lib/core/generated/FeedPresenceChange.ts';
 
 /**
  * A touch is reported at most this often: a scroll fires dozens of events a

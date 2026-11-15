@@ -6,13 +6,13 @@
  * user-verified assertion over exactly the approval bytes, by the member's
  * key. The browser (fetch, the window, its messages) is stood in for.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Account } from '$lib/core/generated/Account';
-import { multisigApprovalRoute } from '$lib/core/kernels';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { multisigApprovalRoute } from '#lib/core/kernels.ts';
 import {
 	approvalChallenge,
 	safeTxHash,

@@ -10,13 +10,13 @@
  * step that keeps them in step with the core (`fee_speed.rs`).
  */
 import { untrack } from 'svelte';
-import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-import { resolvedFormatKeys } from '$lib/services/locale-format';
+import type { FeeBalanceChange } from '#lib/core/generated/FeeBalanceChange.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import { feeTierPreference } from '#lib/settings/core/fee-tier.svelte.ts';
+import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
 import { FeeSpeedSession, reconcileSpeed } from './fee-speed.svelte';
 import { IDLE_FEE_VIEW, type FeeQuote } from './fee-quote.svelte';
 import { TierPreview } from './tier-preview.svelte';

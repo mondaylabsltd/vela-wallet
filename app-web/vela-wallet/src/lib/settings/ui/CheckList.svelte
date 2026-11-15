@@ -5,8 +5,8 @@
 	 * is what makes "not compatible" readable as "these three, not all four".
 	 */
 	import type { CheckItemModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		title: string;

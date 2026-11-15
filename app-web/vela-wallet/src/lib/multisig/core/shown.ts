@@ -4,10 +4,10 @@
  * settings) reads it here, so moving between them never changes whose
  * balance, activity or contacts are on screen.
  */
-import { accountName } from '$lib/multisig/core/account-name';
+import { accountName } from '#lib/multisig/core/account-name.ts';
 import { resolve } from '$app/paths';
-import { identiconSvgForClient } from '$lib/wallet/identicon';
-import type { WalletIdentity } from '$lib/wallet/identity';
+import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
 import type { MultisigMessages } from '../messages';
 import { multisigName, ruleChipText, ruleTitle } from './display';
 import { sameAddress } from './kernel';

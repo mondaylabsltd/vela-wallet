@@ -8,9 +8,9 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
-import { resolveRequestMessages, resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import type { NetCompatibility } from '#lib/core/generated/NetCompatibility.ts';
+import { resolveRequestMessages, resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { NET_HINT_KEYS } from './messages';
 import { netRefusal } from './net-refusal';
 

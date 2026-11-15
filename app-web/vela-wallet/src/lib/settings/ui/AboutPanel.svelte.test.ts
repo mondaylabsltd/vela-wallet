@@ -6,8 +6,8 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
 import AboutPanel from './AboutPanel.svelte';
 import { buildDesktopState, buildMobileState } from '../fixtures';
 import { words } from '../__fixtures__/words';

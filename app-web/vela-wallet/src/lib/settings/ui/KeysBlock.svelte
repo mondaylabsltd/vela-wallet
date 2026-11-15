@@ -24,11 +24,11 @@
 	 * and the copy's row the room of its tallest second line, so each is one
 	 * height before the answer, after it, and when there is none.
 	 */
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import PasskeyProviderMark from '$lib/ui/onboarding/v2/PasskeyProviderMark.svelte';
-	import { providerLabel } from '$lib/onboarding/core/passkey-directory.svelte';
-	import { isDarkTheme } from '$lib/theme.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import PasskeyProviderMark from '#lib/ui/onboarding/v2/PasskeyProviderMark.svelte';
+	import { providerLabel } from '#lib/onboarding/core/passkey-directory.svelte.ts';
+	import { isDarkTheme } from '#lib/theme.svelte.ts';
 	import type { WalletKeysModel } from '../model';
 
 	interface Props {

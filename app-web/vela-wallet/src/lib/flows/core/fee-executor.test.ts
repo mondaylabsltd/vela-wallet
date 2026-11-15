@@ -23,16 +23,16 @@ const seams = vi.hoisted(() => ({
 	gasSignals: vi.fn()
 }));
 
-vi.mock('$lib/services/bundler-service', () => ({
+vi.mock('#lib/services/bundler-service.ts', () => ({
 	fetchInBandGasQuotes: seams.inBandQuotes,
 	fetchBundlerAccountInfo: vi.fn()
 }));
 
-vi.mock('$lib/services/wallet-api', () => ({
+vi.mock('#lib/services/wallet-api.ts', () => ({
 	getCachedNativePriceUsd: seams.nativePrice
 }));
 
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	accountIsDeployed: seams.deployed,
 	fetchRawBundlerQuote: vi.fn(),
 	fetchRawGasSignals: seams.gasSignals,
@@ -41,10 +41,10 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	simulateUserOpGas: vi.fn()
 }));
 
-vi.mock('$lib/services/accounts', () => ({ findAccountByAddress: vi.fn() }));
+vi.mock('#lib/services/accounts.ts', () => ({ findAccountByAddress: vi.fn() }));
 
 import { createFeeExecutor, feeOperationFailure } from './fee-executor';
-import { DeploymentInternalError, DeploymentReadError } from '$lib/services/deployment-read';
+import { DeploymentInternalError, DeploymentReadError } from '#lib/services/deployment-read.ts';
 
 const ACCOUNT = '0x1111111111111111111111111111111111111111';
 const XLAYER = 196;

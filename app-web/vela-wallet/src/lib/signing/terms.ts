@@ -8,7 +8,7 @@
  * `satisfies` is the drift guard: a term the core adds, or one it drops, fails
  * the build here rather than showing English on a Chinese sheet.
  */
-import type { ClearTerm } from '$lib/core/generated/ClearTerm';
+import type { ClearTerm } from '#lib/core/generated/ClearTerm.ts';
 
 const ALL = {
 	intentApprove: true,

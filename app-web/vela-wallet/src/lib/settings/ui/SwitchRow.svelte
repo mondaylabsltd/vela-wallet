@@ -2,15 +2,15 @@
 	/**
 	 * A settings row that is a switch: an optional glyph, a title, the line
 	 * that says what it means, and the product's on/off track
-	 * (`$lib/ui/Switch.svelte`'s look) at the end. The whole row is the target,
+	 * (`#lib/ui/Switch.svelte`'s look) at the end. The whole row is the target,
 	 * as every settings row is.
 	 *
 	 * Used by "Share anonymous usage statistics" — in 高级 beside the AI agent
 	 * and the connected sites on the phone, its own panel on the desktop.
 	 */
 	import type { SwitchRowModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		row: SwitchRowModel;

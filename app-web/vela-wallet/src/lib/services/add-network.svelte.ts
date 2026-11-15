@@ -7,9 +7,9 @@
  * back into one answer. The session is the shared app-resident one (024), so
  * the ledger this gate reads is the ledger the settings screen writes.
  */
-import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
-import type { NetView } from '$lib/core/generated/NetView';
-import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
+import type { NetNetworkRow } from '#lib/core/generated/NetNetworkRow.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
 
 export type AddNetworkResult =
 	| { ok: true; chainId: number }

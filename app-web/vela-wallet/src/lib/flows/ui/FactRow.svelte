@@ -8,11 +8,11 @@
 	 * and in whether the value is copyable, so those are props rather than
 	 * four near-identical rows.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
-	import AddressText from '$lib/ui/AddressText.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
+	import AddressText from '#lib/ui/AddressText.svelte';
 	import type { FactRowModel } from '../model';
 
 	interface Props {

@@ -6,7 +6,7 @@
  * drop to a second line whole — and the two must never disagree about WHETHER
  * there is a money figure.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { feeAmountText, feeLine, feeLineParts } from './fee-line';
 

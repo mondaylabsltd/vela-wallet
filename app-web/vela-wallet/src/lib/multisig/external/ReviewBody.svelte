@@ -10,11 +10,11 @@
 	 * by the connect page review and the sheet that asks an outside wallet:
 	 * one reading, one drawing — nothing here reads the SafeTx again.
 	 */
-	import BlockList from '$lib/signing/ui/BlockList.svelte';
-	import type { SigningMessages } from '$lib/signing/messages';
-	import type { SimEnded } from '$lib/signing/verdict';
-	import { resolvedFormatKeys } from '$lib/services/locale-format';
-	import { nativeSymbol } from '$lib/services/networks';
+	import BlockList from '#lib/signing/ui/BlockList.svelte';
+	import type { SigningMessages } from '#lib/signing/messages.ts';
+	import type { SimEnded } from '#lib/signing/verdict.ts';
+	import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
+	import { nativeSymbol } from '#lib/services/networks.ts';
 	import type { MultisigMessages } from '../messages';
 	import { readingBlocks } from '../core/reading-blocks';
 	import { simEndedOf } from '../core/proposal-review.svelte';

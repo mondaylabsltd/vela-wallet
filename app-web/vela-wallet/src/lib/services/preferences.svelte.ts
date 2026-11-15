@@ -32,8 +32,8 @@
  * the store is migrated and read again through it — which is when an older
  * shell's spelling starts to count.
  */
-import { browser } from '$app/environment';
-import { loadCore, prefsMigrations, prefsRead } from '$lib/core/client';
+import { browser } from '$app/env';
+import { loadCore, prefsMigrations, prefsRead } from '#lib/core/client.ts';
 
 /** What a person picks in 外观. `system` pins nothing and follows the OS. */
 export type ThemeChoice = 'system' | 'light' | 'dark';

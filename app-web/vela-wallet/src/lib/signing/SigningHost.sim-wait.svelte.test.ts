@@ -37,9 +37,9 @@ import { flushSync, tick } from 'svelte';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import type { SignEvent } from '$lib/core/generated/SignEvent';
-import type { SignView } from '$lib/core/generated/SignView';
+import '#lib/tokens/tokens.css';
+import type { SignEvent } from '#lib/core/generated/SignEvent.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
 
 const ME = '0x1111111111111111111111111111111111111111';
 /** r22-6: a node reply marked as one node's alone, nobody independent answering. */
@@ -47,15 +47,15 @@ const SINGLE_NODE = vi.hoisted(() => 'single-node:');
 
 /** dapp-15: whether the chain answers a plain read again (the host's "is the node back?"). */
 const chain = vi.hoisted(() => ({ back: false }));
-vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+vi.mock('#lib/services/rpc-pool.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/rpc-pool.ts')>()),
 	poolRpcCall: async () => {
 		if (!chain.back) throw new Error('no node answered');
 		return { jsonrpc: '2.0', id: 1, result: '0x10' };
 	}
 }));
 
-vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
+vi.mock('#lib/signing/core/sign-resident.svelte.ts', () => ({
 	signRequest: {
 		get view() {
 			return core.view;
@@ -70,7 +70,7 @@ vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
 	}
 }));
 // The reading and the guard, READY: neither holds the confirm.
-vi.mock('$lib/signing/core/sheet.svelte', () => ({
+vi.mock('#lib/signing/core/sheet.svelte.ts', () => ({
 	signingSheet: {
 		present: async () => {},
 		dismiss: () => {},
@@ -83,7 +83,7 @@ vi.mock('$lib/signing/core/sheet.svelte', () => ({
 		dispatchGuard: () => {}
 	}
 }));
-vi.mock('$lib/session/core/session.svelte', () => ({
+vi.mock('#lib/session/core/session.svelte.ts', () => ({
 	session: {
 		view: {
 			loading: false,
@@ -103,20 +103,20 @@ vi.mock('$lib/session/core/session.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/settings/core/currency.svelte', () => ({
+vi.mock('#lib/settings/core/currency.svelte.ts', () => ({
 	currency: {
 		view: { code: 'USD', rate: 1, committed: true, pending: null },
 		boot: async () => {}
 	}
 }));
-vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
+vi.mock('#lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 // No picture is fetched from a test: the network's mark is its drawn one
 // (and the page, served over http below, has no icon to ask for).
-vi.mock('$lib/flows/marks', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/flows/marks')>()),
+vi.mock('#lib/flows/marks.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/flows/marks.ts')>()),
 	chainLogoURL: () => undefined
 }));
-vi.mock('$lib/wallet/core/tracker-resident', () => ({
+vi.mock('#lib/wallet/core/tracker-resident.ts', () => ({
 	subscribeTxTracker: () => () => {},
 	txTrackerView: () => ({ entries: [] })
 }));
@@ -124,10 +124,10 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 // `checkRequest` and the core's reading of the reply (`simOutcome`) are real.
 // R22: the reply as two independent nodes gave it alike (the corroborated
 // envelope `rpcSimulateReply` now hands over) — an honest network.
-vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
+vi.mock('#lib/services/sim/sim-engine-rpc.ts', () => ({
 	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) =>
 		node.ask({ from, calls, chainId }).then(async (reply: string) => {
-			const witnessed = await import('$lib/signing/sim-witnessed');
+			const witnessed = await import('#lib/signing/sim-witnessed.ts');
 			// r22-6: `SINGLE` + a reply — one node answered, nobody independent ("unconfirmed").
 			return reply.startsWith(SINGLE_NODE)
 				? witnessed.singleNode(reply.slice(SINGLE_NODE.length))
@@ -137,7 +137,7 @@ vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
 	rpcSimulate: async () => null
 }));
 // The fee, READY at the speed in force: it does not hold the confirm either.
-vi.mock('$lib/flows/core/speed-control.svelte', () => ({
+vi.mock('#lib/flows/core/speed-control.svelte.ts', () => ({
 	SpeedControl: class {
 		attach() {}
 		boot() {
@@ -165,9 +165,12 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 	}
 }));
 
-import { loadCore } from '$lib/core/client';
-import { createSignRequestSession, type SignRequestSession } from '$lib/signing/core/sign-session';
-import type { SignShellPorts } from '$lib/signing/core/sign-types';
+import { loadCore } from '#lib/core/client.ts';
+import {
+	createSignRequestSession,
+	type SignRequestSession
+} from '#lib/signing/core/sign-session.ts';
+import type { SignShellPorts } from '#lib/signing/core/sign-types.ts';
 import SigningHost from './SigningHost.svelte';
 
 const READY_CLEAR = {

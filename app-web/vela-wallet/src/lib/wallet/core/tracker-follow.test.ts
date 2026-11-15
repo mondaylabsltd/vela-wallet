@@ -6,11 +6,11 @@
  * to the wallet's tracker. The share protocol has its own suite
  * (`tracker-share.test.ts`); this pins the resident's wiring of it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
-import type { InFlightOp } from '$lib/core/generated/InFlightOp';
-import type { TrackEvent } from '$lib/core/generated/TrackEvent';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import type { InFlightOp } from '#lib/core/generated/InFlightOp.ts';
+import type { TrackEvent } from '#lib/core/generated/TrackEvent.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 
 const seams = vi.hoisted(() => ({
 	loadTransactions: vi.fn(async () => []),
@@ -18,21 +18,21 @@ const seams = vi.hoisted(() => ({
 	status: vi.fn(async () => null)
 }));
 
-vi.mock('$lib/core/client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
-vi.mock('$lib/services/records', () => ({
+vi.mock('#lib/services/records.ts', () => ({
 	loadTransactions: seams.loadTransactions,
 	updateTransactions: vi.fn(async () => {})
 }));
-vi.mock('$lib/services/tx-reconciler', () => ({
+vi.mock('#lib/services/tx-reconciler.ts', () => ({
 	pollUserOpStatus: seams.status,
 	requestUserOpReceipt: seams.receipt
 }));
-vi.mock('$lib/services/rpc-adapter', () => ({ rpcCall: vi.fn(async () => ({ result: null })) }));
-vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { refresh: vi.fn() } }));
-vi.mock('$lib/wallet/core/feed.svelte', () => ({ feed: { reconciled: vi.fn() } }));
+vi.mock('#lib/services/rpc-adapter.ts', () => ({ rpcCall: vi.fn(async () => ({ result: null })) }));
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({ balance: { refresh: vi.fn() } }));
+vi.mock('#lib/wallet/core/feed.svelte.ts', () => ({ feed: { reconciled: vi.fn() } }));
 vi.mock('./token-trust-resident', () => ({ notifyReceiptLogsConfirmed: vi.fn() }));
 
 import {

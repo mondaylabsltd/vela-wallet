@@ -14,23 +14,23 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 // The chain's registry names no token of ours, and the account holds none:
 // whatever arrives is a stranger's.
-vi.mock('$lib/services/chain-tokens', () => ({
+vi.mock('#lib/services/chain-tokens.ts', () => ({
 	fetchChainTokens: async () => ({ stables: [], wrappedNativeToken: null })
 }));
-vi.mock('$lib/services/wallet-api', () => ({
+vi.mock('#lib/services/wallet-api.ts', () => ({
 	getCachedHeldTokens: () => [],
 	clearTokenCache: () => {}
 }));
 /** Tokens whose `symbol()` answers — as any contract's can, with any word. */
 const named = vi.hoisted(() => new Map<string, { symbol: string; decimals: number }>());
-vi.mock('$lib/services/token-metadata', () => ({
+vi.mock('#lib/services/token-metadata.ts', () => ({
 	resolveTokenMetadata: async (_chainId: number, addrs: string[]) =>
 		new Map(
 			addrs.flatMap((addr) => {
@@ -41,9 +41,9 @@ vi.mock('$lib/services/token-metadata', () => ({
 }));
 // The resident's own exports, real — and watchable, for the one judgment a
 // simulation of whole numbers cannot produce.
-vi.mock('$lib/wallet/core/token-trust-resident', { spy: true });
+vi.mock('#lib/wallet/core/token-trust-resident.ts', { spy: true });
 
-import { judgeSimDeltas } from '$lib/wallet/core/token-trust-resident';
+import { judgeSimDeltas } from '#lib/wallet/core/token-trust-resident.ts';
 import { enrichDeltas } from './sim-trust';
 import { deserializeAssetSim, serializeAssetSim, type AssetSimResult } from './tx-simulation';
 
@@ -56,7 +56,7 @@ const LURE = 5_000n * 10n ** 18n;
 const OUTFLOW = 7_000n * 10n ** 18n;
 
 beforeAll(async () => {
-	await import('$lib/i18n/wasm-init.server');
+	await import('#lib/i18n/wasm-init.server.ts');
 	// It answers "USDC", 18 decimals. Anybody's contract can.
 	named.set(LURE_TOKEN, { symbol: 'USDC', decimals: 18 });
 });

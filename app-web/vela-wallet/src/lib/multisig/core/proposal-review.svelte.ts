@@ -5,8 +5,8 @@
  * simulation (the token rules for the Safe's moves) and how often an open
  * sheet asks the machine for the review again.
  */
-import { judgeCheck } from '$lib/services/sim/sim-trust';
-import type { SimEnded } from '$lib/signing/verdict';
+import { judgeCheck } from '#lib/services/sim/sim-trust.ts';
+import type { SimEnded } from '#lib/signing/verdict.ts';
 import type { MultisigReviewOut } from './kernel';
 
 /**

@@ -16,13 +16,13 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import { pluralTemplate } from '$lib/i18n/plural';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
+import { pluralTemplate } from '#lib/i18n/plural.ts';
 import en from '../../../../../../../assets/i18n/en.json';
 import ru from '../../../../../../../assets/i18n/ru.json';
 import zh from '../../../../../../../assets/i18n/zh.json';
-import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
+import type { CreateKeyRow } from '#lib/onboarding/generated/CreateKeyRow.ts';
 import KeysScreen from './KeysScreen.svelte';
 import DoneScreen from './DoneScreen.svelte';
 

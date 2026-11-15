@@ -5,7 +5,7 @@
 	 * the default — so nobody is on a developer's service without knowing.
 	 * Neutral: a fact, not a warning. Nothing at all with the default.
 	 */
-	import { fillTemplate } from '$lib/i18n/fill';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
 	import type { MultisigMessages } from '../messages';
 	import { genesisService, serviceHost } from '../core/service-state.svelte';
 

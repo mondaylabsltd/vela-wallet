@@ -3,10 +3,10 @@
  * against hand-written core-view fixtures. Sibling of fixtures.test.ts.
  */
 import { describe, expect, it } from 'vitest';
-import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
-import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
-import type { NetView } from '$lib/core/generated/NetView';
-import type { NetWizardView } from '$lib/core/generated/NetWizardView';
+import type { NetCompatibility } from '#lib/core/generated/NetCompatibility.ts';
+import type { NetNetworkRow } from '#lib/core/generated/NetNetworkRow.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import type { NetWizardView } from '#lib/core/generated/NetWizardView.ts';
 import { MARKS } from './fixtures';
 import {
 	liveAddNetwork,
@@ -31,20 +31,20 @@ import {
 	withLivePreferencesDesktop,
 	withLiveStorage
 } from './live';
-import type { DeviceStorageReport } from '$lib/services/device-storage';
+import type { DeviceStorageReport } from '#lib/services/device-storage.ts';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { removeNetworkQuestion } from './questions';
-import { resolveNetworkSpaceMessages } from '$lib/i18n/engine.server';
-import { fill } from '$lib/wallet/messages';
-import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
-import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
-import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
-import { setPageLanguage } from '$lib/i18n/page-language.svelte';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { UnreachableNetwork } from '$lib/core/generated/UnreachableNetwork';
+import { resolveNetworkSpaceMessages } from '#lib/i18n/engine.server.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { DisplayCurrencyCore, FeeTierPrefCore } from '#lib/core/client.ts';
+import type { FeeTierPrefView } from '#lib/core/generated/FeeTierPrefView.ts';
+import type { SendTreasuryStatus } from '#lib/core/generated/SendTreasuryStatus.ts';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES, type Locale } from '#lib/i18n/locales.ts';
+import { setPageLanguage } from '#lib/i18n/page-language.svelte.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { UnreachableNetwork } from '#lib/core/generated/UnreachableNetwork.ts';
 
 const m = resolveSettingsMessages('en');
 
@@ -1139,7 +1139,7 @@ describe('liveAccountsSheet', () => {
 
 	it('hidden: every row and the total are the mask — even a figure somebody still holds', async () => {
 		const { liveAccountsSheet } = await import('./live');
-		const { MASK } = await import('$lib/wallet/fixtures');
+		const { MASK } = await import('#lib/wallet/fixtures.ts');
 		const balances = new Map<string, number>([[rows[0]!.account.address.toLowerCase(), 3262.4]]);
 		const sheet = liveAccountsSheet(
 			{ rows, activeIndex: 0, balances, hidden: true, currency: usd, identicon: () => '' },
@@ -1178,7 +1178,7 @@ describe('liveAccountsSheet', () => {
 	// chosen by the core's rule (`pluralForm`), never by `count === 1` here.
 	it('counts the accounts in the form the count takes', async () => {
 		const { liveAccountsSheet } = await import('./live');
-		const { resolveSettingsMessages } = await import('$lib/i18n/engine.server');
+		const { resolveSettingsMessages } = await import('#lib/i18n/engine.server.ts');
 		const summary = (locale: Parameters<typeof resolveSettingsMessages>[0], n: number) =>
 			liveAccountsSheet(
 				{

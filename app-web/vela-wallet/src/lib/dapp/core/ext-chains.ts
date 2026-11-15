@@ -22,11 +22,11 @@ import {
 	networkConfigSync,
 	spaceNetworksSync,
 	nativeSymbol
-} from '$lib/services/networks';
-import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
+} from '#lib/services/networks.ts';
+import { getBuiltinBundlerUrl } from '#lib/services/rpc-pool-endpoints.ts';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
 import { ACCOUNT_CHAINS_KEY, CHAINS_KEY } from '../keys';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
 
 /** One chain, as the worker needs it. */
 export interface ExtChainEntry {

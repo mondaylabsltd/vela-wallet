@@ -4,7 +4,7 @@
  * this file only names the JSON. Callers run after `loadCore()`.
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
+import type { SimVerdict } from '#lib/core/generated/SimVerdict.ts';
 
 /** A Safe's creation parameters, as the Safe Genesis Registry stores them. */
 export interface Genesis {

@@ -4,8 +4,8 @@
  * the network, where it is the chain's) — said plainly, never summarised
  * away.
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import { chainName } from '$lib/services/networks';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import { chainName } from '#lib/services/networks.ts';
 import type { Finding } from '../core/refusal';
 import type { Refusal, Risk } from '../core/kernel';
 import type { MultisigMessages } from '../messages';

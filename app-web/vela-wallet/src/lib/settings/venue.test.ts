@@ -14,7 +14,7 @@
  *    every account, with what a signing page protects against and what it
  *    does not said under it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { SigningPagesCore } from '../../../../../rust/pkg-web/vela_core.js';
 import {
@@ -23,11 +23,11 @@ import {
 	signingVenueBlock,
 	signingVenueChoices,
 	venueBlockLine
-} from '$lib/core/kernels';
-import type { VenueBlock } from '$lib/core/generated/VenueBlock';
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import type { SigningPagesView } from '$lib/core/generated/SigningPagesView';
+} from '#lib/core/kernels.ts';
+import type { VenueBlock } from '#lib/core/generated/VenueBlock.ts';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import type { SigningPagesView } from '#lib/core/generated/SigningPagesView.ts';
 import { BOARD_CHECK, BOARD_CHECK_TIME, boardCheckTime } from './board-check';
 import {
 	NEW_PAGE,

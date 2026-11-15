@@ -7,11 +7,11 @@
 	 * this component only reports the ids left ticked when 保存 is pressed.
 	 */
 	import { SvelteSet } from 'svelte/reactivity';
-	import Button from '$lib/ui/Button.svelte';
-	import SearchField from '$lib/flows/ui/SearchField.svelte';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import Button from '#lib/ui/Button.svelte';
+	import SearchField from '#lib/flows/ui/SearchField.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import type { PickListModel } from '../live';
 
 	interface Props {

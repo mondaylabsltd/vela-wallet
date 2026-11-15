@@ -43,8 +43,8 @@
 	 * sign, and the relay pays the chain. A bid that reaches up to 805 is the
 	 * truth about both ends, and on issue 684's one figure too.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { FeeSpeedModel } from '../model';
 
 	interface Props {

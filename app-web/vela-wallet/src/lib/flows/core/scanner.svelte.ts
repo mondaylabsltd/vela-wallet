@@ -16,7 +16,7 @@ import {
 	canvasFromFile,
 	decodeImage,
 	loadDecoders
-} from '$lib/services/qr-decode';
+} from '#lib/services/qr-decode.ts';
 import type { WalletFlowMessages } from '../messages';
 
 /** Why there is no picture — each one a different thing to do about it. */

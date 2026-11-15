@@ -27,15 +27,15 @@ import {
 	MultisigAccountsCore,
 	MultisigMembersCore,
 	MultisigProposalsCore
-} from '$lib/core/client';
-import type { JsonWasmCore } from '$lib/core/json-shell';
-import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '$lib/onboarding/core/storage';
+} from '#lib/core/client.ts';
+import type { JsonWasmCore } from '#lib/core/json-shell.ts';
+import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '#lib/onboarding/core/storage.ts';
 import {
 	getAllNetworksSync,
 	networkRank,
 	spaceNetworksSync,
 	subscribeNetworks
-} from '$lib/services/networks';
+} from '#lib/services/networks.ts';
 import { genesisServiceURL } from '../core/service';
 import {
 	ACTIVE_MULTISIG_KEY,
@@ -60,8 +60,8 @@ import { localAccounts } from './local-accounts';
 import { MultisigMachine } from './machine.svelte';
 import { lazyPeerRooms } from './peer-lazy';
 import { proposalsHost, type ProposalsHostOptions } from './proposals-host.svelte';
-import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-import { session } from '$lib/session/core/session.svelte';
+import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
 
 /** How often a record that has not landed is asked about again while a page is open. */
 export const RECORD_RETRY_MS = 60_000;

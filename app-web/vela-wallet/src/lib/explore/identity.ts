@@ -7,7 +7,7 @@
  * named a stranger's account would be the wallet lying about what it just
  * granted, which is worse than showing nothing.
  */
-import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
+import { shortenAddress, type WalletIdentity } from '#lib/wallet/identity.ts';
 import type { ExploreDesktopModel, ExploreHomeModel } from './model';
 
 /** The phone model, wearing the signed-in wallet's identity. */

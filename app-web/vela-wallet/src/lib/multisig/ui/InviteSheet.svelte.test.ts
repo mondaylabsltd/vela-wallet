@@ -5,8 +5,8 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
+import '#lib/tokens/tokens.css';
+import { identiconViewer } from '#lib/wallet/identicon-viewer.svelte.ts';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
@@ -24,16 +24,16 @@ vi.mock('../core/store.svelte', () => ({
 		accounts: []
 	}
 }));
-vi.mock('$lib/services/public-key-index', () => ({
+vi.mock('#lib/services/public-key-index.ts', () => ({
 	queryWalletName: async () => null,
 	lookupWalletName: async () => null
 }));
-vi.mock('$lib/wallet/identicon', () => ({
+vi.mock('#lib/wallet/identicon.ts', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
 
 const { default: InviteSheet } = await import('./InviteSheet.svelte');
-const { loadCore } = await import('$lib/core/client');
+const { loadCore } = await import('#lib/core/client.ts');
 
 // The invite is the core's codec: loaded, as the wallet loads it before any sheet.
 beforeAll(() => loadCore());

@@ -1,54 +1,16 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
-	// SvelteKit writes its include/exclude inside `.svelte-kit/`, so the globs
-	// read `../src/**/*.ts`. TypeScript resolves those against the file that
-	// declares them; rolldown's tsconfig reader resolves them against THIS
-	// file, concludes `src/` is not covered, and keeps walking up the tree
-	// looking for a tsconfig that does. Restating the same globs relative to
-	// this file stops the walk here and has the transform read these
-	// compilerOptions. (Found when the walk used to land on the repo-root
-	// tsconfig of the retired Expo app, whose `extends` could not resolve in
-	// a Cloudflare build that installs this app alone — that file is gone
-	// since spec 039, but a walk that ends anywhere but here is still wrong.)
-	// Listing an explicit `exclude` overrides the default, so node_modules must
-	// be re-listed.
-	"include": [
-		".svelte-kit/ambient.d.ts",
-		".svelte-kit/env.d.ts",
-		".svelte-kit/non-ambient.d.ts",
-		".svelte-kit/types/**/$types.d.ts",
-		"vite.config.js",
-		"vite.config.ts",
-		"src/**/*.js",
-		"src/**/*.ts",
-		"src/**/*.svelte",
-		"test/**/*.js",
-		"test/**/*.ts",
-		"test/**/*.svelte",
-		"tests/**/*.js",
-		"tests/**/*.ts",
-		"tests/**/*.svelte"
-	],
-	"exclude": [
-		"node_modules/**",
-		"src/service-worker.js",
-		"src/service-worker/**/*.js",
-		"src/service-worker.ts",
-		"src/service-worker/**/*.ts",
-		"src/service-worker.d.ts",
-		"src/service-worker/**/*.d.ts"
-	],
+	"extends": "$app/tsconfig",
+	// `include` is stated here, relative to this file. rolldown's tsconfig
+	// reader resolves globs against the file that declares them; without them
+	// here it concludes `src/` is not covered and keeps walking up the tree for
+	// a tsconfig that does (found when that walk landed on the retired Expo
+	// app's root tsconfig in a Cloudflare build). `$app/tsconfig` sets the
+	// compiler options and no `include`.
+	"include": ["src", "vite.config.ts", "playwright*.config.ts", "vitest-setup-client.ts"],
 	"compilerOptions": {
-		"rewriteRelativeImportExtensions": true,
-		"allowJs": true,
 		"checkJs": false,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "bundler",
-		"types": ["./worker-configuration.d.ts"]
+		"types": ["$app/types", "./worker-configuration.d.ts"]
 	}
 }

@@ -17,17 +17,17 @@
  * `chainMark`; anything that names a COIN wears `tokenMarkFor`. ETH sent on
  * Base has a Base network row, never Ethereum's logo beside "Base".
  */
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { MarkView } from '$lib/core/generated/MarkView';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { MarkView } from '#lib/core/generated/MarkView.ts';
 import {
 	chainLogoUrl as coreChainLogoUrl,
 	chainMark as coreChainMark,
 	tokenMark as coreTokenMark
-} from '$lib/core/kernels';
-import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
-import { allowedOrNull } from '$lib/services/url-policy';
-import { nativeSymbol } from '$lib/services/networks';
-import { chainColor } from '$lib/wallet/fixtures';
+} from '#lib/core/kernels.ts';
+import { loadServiceEndpoints } from '#lib/onboarding/core/storage.ts';
+import { allowedOrNull } from '#lib/services/url-policy.ts';
+import { nativeSymbol } from '#lib/services/networks.ts';
+import { chainColor } from '#lib/wallet/fixtures.ts';
 import type { TokenMarkModel } from './model';
 
 /**

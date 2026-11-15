@@ -14,17 +14,17 @@
  *   read/written through the KV. An unreadable flag SHOWS the gate.
  */
 
-import { loadCore, PaymentRequestCore } from '$lib/core/client';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { PayRefusal } from '$lib/core/generated/PayRefusal';
-import type { PayRequest } from '$lib/core/generated/PayRequest';
-import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
-import type { PaymentRequestOperation } from '$lib/core/generated/PaymentRequestOperation';
-import type { PaymentRequestShellResult } from '$lib/core/generated/PaymentRequestShellResult';
-import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
-import type { SessionOptions } from '$lib/core/types';
-import { getItem, setItem } from '$lib/services/storage';
+import { loadCore, PaymentRequestCore } from '#lib/core/client.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { PayRefusal } from '#lib/core/generated/PayRefusal.ts';
+import type { PayRequest } from '#lib/core/generated/PayRequest.ts';
+import type { PaymentRequestEvent } from '#lib/core/generated/PaymentRequestEvent.ts';
+import type { PaymentRequestOperation } from '#lib/core/generated/PaymentRequestOperation.ts';
+import type { PaymentRequestShellResult } from '#lib/core/generated/PaymentRequestShellResult.ts';
+import type { PaymentRequestView } from '#lib/core/generated/PaymentRequestView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
+import { getItem, setItem } from '#lib/services/storage.ts';
 
 export type PaymentRequestEffect = { id: number; operation: PaymentRequestOperation };
 

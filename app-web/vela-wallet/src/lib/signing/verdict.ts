@@ -39,12 +39,12 @@
  * | no check / nobody judged / no row     | the caution "Vela couldn't check…"            |
  * | still out                             | the card saying "Checking…"                   |
  */
-import { formatSignedTokenAmount, simOutcome } from '$lib/core/kernels';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
-import type { TrustSimView } from '$lib/core/generated/TrustSimView';
-import { fill } from '$lib/wallet/messages';
-import { shortenAddress } from '$lib/wallet/identity';
+import { formatSignedTokenAmount, simOutcome } from '#lib/core/kernels.ts';
+import type { SimVerdict } from '#lib/core/generated/SimVerdict.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
+import type { TrustSimView } from '#lib/core/generated/TrustSimView.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 import {
 	SIM_DISAGREED_KEY,
 	SIM_OWN_NODE_KEY,

@@ -6,8 +6,8 @@
  * core in `flows/core/fee-retry.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
 import { feeFailureCause, FeeFailureLog, type FeeFailureInput } from './fee-failure-log';
 
 function harness() {

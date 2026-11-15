@@ -14,8 +14,8 @@
 import { tick as svelteTick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import type { WorldSafe } from '../shell/members.testing';
 
@@ -113,8 +113,8 @@ vi.mock('../shell/proposals-host.svelte', () => {
 	};
 });
 // The wallet's network order, as these tests list it: Arc, Base, Gnosis.
-vi.mock('$lib/services/networks', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/networks')>()),
+vi.mock('#lib/services/networks.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/networks.ts')>()),
 	networkRank: (id: number) => [ARC, BASE, GNOSIS].indexOf(id)
 }));
 vi.mock('../core/display', () => ({
@@ -138,18 +138,18 @@ vi.mock('../core/names.svelte', async () => {
 		keptMember: () => ({})
 	};
 });
-vi.mock('$lib/onboarding/core/storage', async (original) => ({
+vi.mock('#lib/onboarding/core/storage.ts', async (original) => ({
 	...(await original<object>()),
 	loadAccounts: () => []
 }));
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({
 	contactsBook: {
 		get view() {
 			return { contacts: seams.contacts };
 		}
 	}
 }));
-vi.mock('$lib/wallet/identicon', () => ({
+vi.mock('#lib/wallet/identicon.ts', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
 

@@ -6,11 +6,11 @@
  * verdict is the core's (`multisigReview`); this file only puts its words on
  * it. Nothing here runs the core.
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import type { SigningMessages } from '$lib/signing/messages';
-import type { Block, KeyValueRow, PartyBadge, TechModel } from '$lib/signing/model';
-import { rawWords } from '$lib/signing/raw-json';
-import { checkingCard, landedVerdict, verdictRooms, type SimEnded } from '$lib/signing/verdict';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import type { SigningMessages } from '#lib/signing/messages.ts';
+import type { Block, KeyValueRow, PartyBadge, TechModel } from '#lib/signing/model.ts';
+import { rawWords } from '#lib/signing/raw-json.ts';
+import { checkingCard, landedVerdict, verdictRooms, type SimEnded } from '#lib/signing/verdict.ts';
 import type { MultisigMessages } from '../messages';
 import type { CriticalWrite, MultisigReviewOut, ReviewRecipient } from './kernel';
 

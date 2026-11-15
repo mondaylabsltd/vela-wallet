@@ -3,7 +3,7 @@
  * rust/crates/vela-core/tests/multisig_link_vectors.rs): here, only that the
  * web reaches it — a link made here reads back as the core reads links.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { addLink, proposalLink, shareOrigin } from './link';

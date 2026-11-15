@@ -14,7 +14,7 @@
  * and the passkey stood in for, on an in-band chain (BNB Chain: native fee and
  * a stablecoin fee) and on Tempo.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const SAFE = '0x88cca0eedbf2c4426110bbfc998f048689266894';
@@ -34,8 +34,8 @@ vi.mock('./bundler-service', async (importOriginal) => ({
 		settlementRecipient: '0x' + '99'.repeat(20)
 	}))
 }));
-vi.mock('$lib/core/kernels', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/kernels')>()),
+vi.mock('#lib/core/kernels.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/kernels.ts')>()),
 	verifySafeWebAuthn: () => ({ ok: true })
 }));
 
@@ -80,7 +80,7 @@ vi.mock('./rpc-adapter', () => ({
 
 /** The passkey: a well-formed assertion over whatever challenge it is shown. */
 const signed = vi.hoisted(() => ({ operations: [] as unknown[] }));
-vi.mock('$lib/signing/sign-challenge', () => ({
+vi.mock('#lib/signing/sign-challenge.ts', () => ({
 	signChallenge: vi.fn(async (challenge: Uint8Array) => {
 		const b64url = btoa(String.fromCharCode(...challenge))
 			.replace(/\+/g, '-')
@@ -101,7 +101,7 @@ vi.mock('$lib/signing/sign-challenge', () => ({
 }));
 
 import { handleDAppRequest } from './dapp-submit';
-import { dappRequestCalls, keccak256 } from '$lib/core/kernels';
+import { dappRequestCalls, keccak256 } from '#lib/core/kernels.ts';
 import { SignAttestError } from './sign-attest';
 import * as safeTransaction from './safe-transaction';
 
@@ -270,7 +270,7 @@ describe('a native value reaches the signature (spec 096 F1)', () => {
 	});
 
 	it('what the passkey is shown is the value in base units', async () => {
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		await run('eth_sendTransaction', [{ to: PCS_ROUTER, value: VALUE, data: '0x3593564c' }], 56);
 		const signer = vi.mocked(signChallenge).mock.calls.at(-1)?.[1] as {
 			request: { params: { value: string }[] };
@@ -281,7 +281,7 @@ describe('a native value reaches the signature (spec 096 F1)', () => {
 	});
 
 	it('an unreadable value never reaches a signature', async () => {
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockClear();
 		// The stripped text the submit used to build, and decimal text.
 		for (const value of ['aa87bee538000', '3000000000000000']) {
@@ -302,7 +302,7 @@ describe('a native value reaches the signature (spec 096 F1)', () => {
  */
 describe('what is signed is what the sheet showed (R22, review 1-5)', () => {
 	it('a drifted operation — the calldata changed after the review — is refused, nothing signed', async () => {
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockClear();
 		const shown = [
 			{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' + '00'.repeat(64) }
@@ -324,7 +324,7 @@ describe('what is signed is what the sheet showed (R22, review 1-5)', () => {
 	});
 
 	it('a request with no review is refused at once — no passkey, no POST', async () => {
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockClear();
 		const params = [{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' }];
 		await expect(run('eth_sendTransaction', params, 56, null, null)).rejects.toBeInstanceOf(
@@ -335,7 +335,7 @@ describe('what is signed is what the sheet showed (R22, review 1-5)', () => {
 	});
 
 	it('a signature over another message than the one read is refused — no passkey', async () => {
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockClear();
 		const eip191 = (text: string) => {
 			const bytes = new TextEncoder().encode(text);

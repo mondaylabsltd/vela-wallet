@@ -59,7 +59,7 @@ export const SIGNING_PAGES = ['https://sign.getvela.app/*'];
  * release package is the development one with that entry and those files
  * removed (`build.mjs`), so the same app bundle asks its own manifest
  * (`runtime.getManifest()`) whether a developer setting may count — the
- * harness's signing page (`$lib/dev/harness-page.ts`) — and the release
+ * harness's signing page (`#lib/dev/harness-page.ts`) — and the release
  * package never says yes. Chrome's manifest names no harness page either.
  *
  * @param {unknown} manifest

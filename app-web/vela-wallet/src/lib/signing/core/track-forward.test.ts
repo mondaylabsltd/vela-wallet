@@ -4,9 +4,9 @@
  * landing is answered at once. And the hand-off keys every shell must use.
  */
 import { describe, expect, it } from 'vitest';
-import type { SignEvent } from '$lib/core/generated/SignEvent';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import type { SignEvent } from '#lib/core/generated/SignEvent.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 import { createTrackForward, handoffKey, withdrawKey } from './track-forward';
 
 const OP = '0x' + 'a1'.repeat(32);

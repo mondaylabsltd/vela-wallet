@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import type { RelayerModel, RelayUnreachableModel } from '../model';
 import RelayerBody from './RelayerBody.svelte';
 import RelayUnreachableBody from './RelayUnreachableBody.svelte';

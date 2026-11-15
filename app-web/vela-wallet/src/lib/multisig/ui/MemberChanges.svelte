@@ -24,13 +24,13 @@
 	 * waiting show here as one change with each network's progress
 	 * ("Arc 1/2 · Base 0/2").
 	 */
-	import AddressText from '$lib/ui/AddressText.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
+	import AddressText from '#lib/ui/AddressText.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
 	import { requireApprovals } from '../core/approvals-words';
-	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import type { MultisigMessages } from '../messages';
 	import { chainName, shortenAddress } from '../core/display';
 	import { sameAddress, type Action, type MemberRefusal, type MemberVerdict } from '../core/kernel';

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
 	import type { MenuItemModel } from '../model';
 
 	/** The desktop right-click menu (DE2), anchored where the pointer was. */

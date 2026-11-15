@@ -8,12 +8,12 @@
  * `receipt_logs_confirmed` token_trust demands, and they must die with the
  * core that populated them.
  */
-import { TxTrackerCore } from '$lib/core/client';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { TrackEvent } from '$lib/core/generated/TrackEvent';
-import type { TrackShellResult } from '$lib/core/generated/TrackShellResult';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import { TxTrackerCore } from '#lib/core/client.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { TrackEvent } from '#lib/core/generated/TrackEvent.ts';
+import type { TrackShellResult } from '#lib/core/generated/TrackShellResult.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 import { createTxTrackerExecutor } from './tracker-executor';
 import type { TrackEffect, TxTrackerSessionOptions } from './tracker-types';
 

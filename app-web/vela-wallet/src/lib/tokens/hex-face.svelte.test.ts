@@ -16,7 +16,7 @@
  * wide as with `calt` forced off, and the computed setting is the body's.
  */
 import { describe, expect, it } from 'vitest';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import '../../app.css';
 
 const WEIGHTS = ['400', '500', '600', '700'] as const;

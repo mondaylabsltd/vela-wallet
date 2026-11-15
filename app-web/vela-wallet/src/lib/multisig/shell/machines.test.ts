@@ -10,7 +10,7 @@
  *   `tick` (one retry at a time is the machine's: Rust,
  *   `created_while_the_service_is_down_is_kept_and_recorded_later`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MultisigAccountsEvent } from '../generated/MultisigAccountsEvent';
 import {

@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalTransaction } from './transactions-model';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
@@ -104,7 +104,7 @@ describe('the strict reader (round 3)', () => {
 	});
 
 	it('a store that cannot be read, or bytes that are no list, throw — never an empty history', async () => {
-		const { getItem } = await import('$lib/services/storage');
+		const { getItem } = await import('#lib/services/storage.ts');
 		vi.mocked(getItem).mockRejectedValueOnce(new Error('IndexedDB blocked'));
 		await expect(readTransactionHistory()).rejects.toThrow('IndexedDB blocked');
 		kv.set('vela.transactionHistory', '{"not":"a list"}');

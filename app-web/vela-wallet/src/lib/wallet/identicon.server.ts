@@ -14,7 +14,7 @@ import {
 	identiconNormalizeSeed,
 	identiconSvgCircular
 } from '../../../../../rust/pkg-web/vela_core.js';
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 // One artwork for "unrenderable", shared with the runtime renderer
 // (`identicon.ts`) through a module that imports neither of them.
 import { IDENTICON_PLACEHOLDER_SVG } from './identicon-placeholder';

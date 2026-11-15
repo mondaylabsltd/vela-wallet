@@ -3,7 +3,7 @@
  * pays for (r4-5, r4-7). When it cannot run and each look's pace are the
  * machine's (app_multisig_presence.rs, app_multisig_proposals.rs).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import { blockOf } from '../shell/proposal-failure';

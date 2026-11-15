@@ -5,12 +5,12 @@
  * Ported from src/services/wallet-state-core/sign-session.ts @ f9bcb278.
  * Callers `loadCore()` first; the resident is the only constructor.
  */
-import { SignRequestCore } from '$lib/core/client';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { SignEvent } from '$lib/core/generated/SignEvent';
-import type { SignShellResult } from '$lib/core/generated/SignShellResult';
-import type { SignView } from '$lib/core/generated/SignView';
+import { SignRequestCore } from '#lib/core/client.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { SignEvent } from '#lib/core/generated/SignEvent.ts';
+import type { SignShellResult } from '#lib/core/generated/SignShellResult.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
 import { createSignExecutor } from './sign-executor';
 import type { SignEffect, SignRequestSessionOptions } from './sign-types';
 

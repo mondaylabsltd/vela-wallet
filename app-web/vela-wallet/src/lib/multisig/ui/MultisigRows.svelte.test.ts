@@ -10,7 +10,7 @@
 import { tick } from 'svelte';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
@@ -63,7 +63,7 @@ vi.mock('../core/owners', () => ({
 }));
 
 const { default: MultisigRows } = await import('./MultisigRows.svelte');
-const { loadCore } = await import('$lib/core/client');
+const { loadCore } = await import('#lib/core/client.ts');
 beforeAll(() => loadCore());
 
 /** Every word is its own key; the rule's carry their numbers. */

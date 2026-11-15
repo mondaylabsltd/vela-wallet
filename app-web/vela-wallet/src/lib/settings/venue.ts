@@ -12,14 +12,14 @@
  * the design the phones build to, and a board drawn by a mapping of its own
  * would be a picture of a screen nobody ships.
  */
-import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
-import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
-import type { SigningPlan } from '$lib/core/generated/SigningPlan';
-import type { SigningVenue } from '$lib/core/generated/SigningVenue';
-import type { VenueBlock } from '$lib/core/generated/VenueBlock';
-import type { VenueChoice } from '$lib/core/generated/VenueChoice';
-import { venueBlockLine } from '$lib/core/kernels';
-import { fill } from '$lib/wallet/messages';
+import type { IntegrityLine } from '#lib/core/generated/IntegrityLine.ts';
+import type { SigningPageRow } from '#lib/core/generated/SigningPageRow.ts';
+import type { SigningPlan } from '#lib/core/generated/SigningPlan.ts';
+import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
+import type { VenueBlock } from '#lib/core/generated/VenueBlock.ts';
+import type { VenueChoice } from '#lib/core/generated/VenueChoice.ts';
+import { venueBlockLine } from '#lib/core/kernels.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import type { SettingsMessages } from './messages';
 import type {
 	IntegrityLineModel,

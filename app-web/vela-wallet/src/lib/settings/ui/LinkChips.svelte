@@ -4,8 +4,8 @@
 	 * quiet and outbound-marked, so they read as a list of places rather than
 	 * as four competing buttons under the one CTA that matters.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		label?: string;

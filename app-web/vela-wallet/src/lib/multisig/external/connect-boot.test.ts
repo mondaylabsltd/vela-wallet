@@ -4,7 +4,7 @@
  * before any module runs (the prerendered page never sees it). Run here
  * against links as `connectLink` builds them.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { connectLink } from '../core/link';

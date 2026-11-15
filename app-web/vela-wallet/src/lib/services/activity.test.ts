@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import type { TrustIncomingView } from '$lib/core/generated/TrustIncomingView';
+import type { TrustIncomingView } from '#lib/core/generated/TrustIncomingView.ts';
 import type { LocalTransaction } from './transactions-model';
 
 // The store, the wallet's held tokens and the `token_trust` feed — stood in
 // for, for the ingestion test at the end. Nothing above it reads them.
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
@@ -19,7 +19,7 @@ vi.mock('./token-metadata', () => ({
 		new Map([['0xddafbb505ad214d7b80b1f830fccc89b60fb7a83', { symbol: 'USDC', decimals: 6 }]])
 }));
 const trust = vi.hoisted(() => ({ feed: [] as unknown[] }));
-vi.mock('$lib/wallet/core/token-trust-resident', () => ({
+vi.mock('#lib/wallet/core/token-trust-resident.ts', () => ({
 	pollIncoming: async () => trust.feed
 }));
 

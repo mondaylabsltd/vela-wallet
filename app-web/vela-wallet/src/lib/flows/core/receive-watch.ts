@@ -11,23 +11,23 @@
  * the balance's update are the visible acknowledgement).
  */
 
-import { ReceiveWatchCore } from '$lib/core/client';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { ReceiveWatchEvent } from '$lib/core/generated/ReceiveWatchEvent';
-import type { ReceiveWatchOperation } from '$lib/core/generated/ReceiveWatchOperation';
-import type { ReceiveWatchShellResult } from '$lib/core/generated/ReceiveWatchShellResult';
-import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
-import type { TokenSnapshot } from '$lib/core/generated/TokenSnapshot';
-import type { SessionOptions } from '$lib/core/types';
-import { hapticSuccess, isAppActive } from '$lib/services/platform';
+import { ReceiveWatchCore } from '#lib/core/client.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { ReceiveWatchEvent } from '#lib/core/generated/ReceiveWatchEvent.ts';
+import type { ReceiveWatchOperation } from '#lib/core/generated/ReceiveWatchOperation.ts';
+import type { ReceiveWatchShellResult } from '#lib/core/generated/ReceiveWatchShellResult.ts';
+import type { ReceiveWatchView } from '#lib/core/generated/ReceiveWatchView.ts';
+import type { TokenSnapshot } from '#lib/core/generated/TokenSnapshot.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
+import { hapticSuccess, isAppActive } from '#lib/services/platform.ts';
 import {
 	tokenBalanceDouble,
 	tokenChainId,
 	tokenId,
 	type APIToken
-} from '$lib/services/tokens-model';
-import { fetchTokens } from '$lib/services/wallet-api';
+} from '#lib/services/tokens-model.ts';
+import { fetchTokens } from '#lib/services/wallet-api.ts';
 
 export type ReceiveWatchEffect = { id: number; operation: ReceiveWatchOperation };
 

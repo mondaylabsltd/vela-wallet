@@ -20,20 +20,20 @@
  *    requester with 4001 — but since spec 079 only the header's ✕ closes it
  *    (no scrim, drag or Escape: a stray touch lost the owner a request).
  */
-import type { ClearBatchCall } from '$lib/core/generated/ClearBatchCall';
-import type { ClearBatchView } from '$lib/core/generated/ClearBatchView';
-import type { ClearSignField } from '$lib/core/generated/ClearSignField';
-import type { ClearSignResult } from '$lib/core/generated/ClearSignResult';
-import type { ClearLineSource } from '$lib/core/generated/ClearLineSource';
-import type { ClearMessageLine } from '$lib/core/generated/ClearMessageLine';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
-import type { GuardView } from '$lib/core/generated/GuardView';
-import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
-import type { SignView } from '$lib/core/generated/SignView';
+import type { ClearBatchCall } from '#lib/core/generated/ClearBatchCall.ts';
+import type { ClearBatchView } from '#lib/core/generated/ClearBatchView.ts';
+import type { ClearSignField } from '#lib/core/generated/ClearSignField.ts';
+import type { ClearSignResult } from '#lib/core/generated/ClearSignResult.ts';
+import type { ClearLineSource } from '#lib/core/generated/ClearLineSource.ts';
+import type { ClearMessageLine } from '#lib/core/generated/ClearMessageLine.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { GuardEditorView } from '#lib/core/generated/GuardEditorView.ts';
+import type { GuardView } from '#lib/core/generated/GuardView.ts';
+import type { SignApproveOpts } from '#lib/core/generated/SignApproveOpts.ts';
+import type { SimVerdict } from '#lib/core/generated/SimVerdict.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
 import {
 	feeAmountText,
 	feeLineParts,
@@ -41,28 +41,28 @@ import {
 	feeParts,
 	NATIVE_FEE_PLACES,
 	TOKEN_FEE_PLACES
-} from '$lib/flows/fee-line';
-import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
-import type { FeeSpeedModel } from '$lib/flows/model';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { chainLogoURL, tokenMarkFor } from '$lib/flows/marks';
-import { browserSiteLabel, checksumAddress, signConfirmState } from '$lib/core/kernels';
-import { estimateRevertsFor } from '$lib/services/estimate-verdict';
-import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
-import { showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
-import { fromBaseUnits } from '$lib/services/eip681';
-import { chainName, nativeSymbol } from '$lib/services/networks';
-import { shortenAddress } from '$lib/wallet/identity';
-import type { WalletIdentity } from '$lib/wallet/identity';
-import { fill } from '$lib/wallet/messages';
-import { venueBlockText } from '$lib/settings/venue';
-import { getEthereumDataURL } from '$lib/services/endpoints';
+} from '#lib/flows/fee-line.ts';
+import { offeredTier, speedControlModel } from '#lib/flows/speed-control.ts';
+import type { FeeSpeedModel } from '#lib/flows/model.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import { chainLogoURL, tokenMarkFor } from '#lib/flows/marks.ts';
+import { browserSiteLabel, checksumAddress, signConfirmState } from '#lib/core/kernels.ts';
+import { estimateRevertsFor } from '#lib/services/estimate-verdict.ts';
+import { exactAmount, moneyText, trimBalance } from '#lib/wallet/live.ts';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { fromBaseUnits } from '#lib/services/eip681.ts';
+import { chainName, nativeSymbol } from '#lib/services/networks.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { venueBlockText } from '#lib/settings/venue.ts';
+import { getEthereumDataURL } from '#lib/services/endpoints.ts';
 import { txParams } from './core/tx-params';
 import { rawWords } from './raw-json';
-import { failedFeeTappable } from '$lib/flows/fee-failure';
-import { resolvedFormatKeys } from '$lib/services/locale-format';
+import { failedFeeTappable } from '#lib/flows/fee-failure.ts';
+import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
 import type { SigningMessages } from './messages';
 import {
 	checkingCard,

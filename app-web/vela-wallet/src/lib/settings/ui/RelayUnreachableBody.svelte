@@ -13,7 +13,7 @@
 	 *   on their own machine or network can only be served by a relay beside it.
 	 */
 	import type { RelayUnreachableModel } from '../model';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import ChainMark from './ChainMark.svelte';
 
 	interface Props {

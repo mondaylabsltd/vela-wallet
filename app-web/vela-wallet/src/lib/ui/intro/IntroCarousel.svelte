@@ -15,12 +15,12 @@
 	 * rather than a decoration. Below `prefers-reduced-motion` the settle is
 	 * instant and the drag still works.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import OnboardingRail from '#lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroSlide from './IntroSlide.svelte';
 	import PageDots from './PageDots.svelte';
-	import { INTRO_SLIDES } from '$lib/intro/slides';
-	import { fillTemplate } from '$lib/i18n/fill';
+	import { INTRO_SLIDES } from '#lib/intro/slides.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
 
 	interface Props {
 		/** Resolved corpus strings, dotted key → text. */

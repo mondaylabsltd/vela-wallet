@@ -14,10 +14,10 @@
  * only ever assert the branch that was already correct; supplying the location
  * is what makes the extension branch testable at all.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { webRelyingPartyId } from '$lib/core/kernels';
+import { webRelyingPartyId } from '#lib/core/kernels.ts';
 import { classifySign, relyingPartyId, SIGN_TIMEOUT_MS } from './passkey';
 
 /**

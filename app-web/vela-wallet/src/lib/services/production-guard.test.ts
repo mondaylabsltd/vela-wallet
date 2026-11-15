@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
 import { DEFAULT_SERVICE_ENDPOINTS } from './endpoints';
-import { DEFAULT_REGISTRY_URL } from '$lib/onboarding/core/registry';
+import { DEFAULT_REGISTRY_URL } from '#lib/onboarding/core/registry.ts';
 import { BUG_REPORT_ENDPOINT } from './bug-report';
 import {
 	ProductionWriteRefused,

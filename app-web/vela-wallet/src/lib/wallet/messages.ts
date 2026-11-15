@@ -7,7 +7,7 @@
  * Templated values (`{{name}}`, `{{count}}`…) are resolved server-side too:
  * fixtures are static, so every interpolation is known at prerender time.
  */
-import { INTENT_TERMS } from '$lib/signing/terms';
+import { INTENT_TERMS } from '#lib/signing/terms.ts';
 
 export interface WalletMessages {
 	nav: { wallet: string; contacts: string; explore: string; settings: string };

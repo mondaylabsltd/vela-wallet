@@ -8,14 +8,14 @@
 	 * sole key must be backed up) surface as a disabled control with a stated
 	 * reason rather than as a click that quietly does nothing.
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import AddMethodPicker from './AddMethodPicker.svelte';
-	import { keyBadge, providerLineFor } from '$lib/onboarding/core/copy';
+	import { keyBadge, providerLineFor } from '#lib/onboarding/core/copy.ts';
 	import PasskeyProviderMark from './PasskeyProviderMark.svelte';
-	import { providerLabel } from '$lib/onboarding/core/passkey-directory.svelte';
-	import { isDarkTheme } from '$lib/theme.svelte';
-	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
-	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+	import { providerLabel } from '#lib/onboarding/core/passkey-directory.svelte.ts';
+	import { isDarkTheme } from '#lib/theme.svelte.ts';
+	import type { CreateKeyRow } from '#lib/onboarding/generated/CreateKeyRow.ts';
+	import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
 
 	interface Props {
 		keys: CreateKeyRow[];

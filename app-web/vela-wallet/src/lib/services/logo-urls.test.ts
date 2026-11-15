@@ -12,9 +12,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
-vi.mock('$app/environment', () => ({ browser: true }));
+vi.mock('$app/env', () => ({ browser: true }));
 
-import { liveChainRows } from '$lib/wallet/live';
+import { liveChainRows } from '#lib/wallet/live.ts';
 
 beforeAll(() => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });

@@ -8,14 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NetEffect } from './network-admin-types';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 
 const endpointsStore: { record: Record<string, string> } = { record: {} };
-vi.mock('$lib/onboarding/core/storage', () => ({
+vi.mock('#lib/onboarding/core/storage.ts', () => ({
 	loadServiceEndpoints: vi.fn(() => endpointsStore.record),
 	saveServiceEndpoints: vi.fn((record: Record<string, string>) => {
 		endpointsStore.record = record;
@@ -23,7 +23,7 @@ vi.mock('$lib/onboarding/core/storage', () => ({
 }));
 
 const indexRows: { rows: unknown[] } = { rows: [] };
-vi.mock('$lib/services/chain-registry', () => ({
+vi.mock('#lib/services/chain-registry.ts', () => ({
 	loadSearchIndex: vi.fn(async () => indexRows.rows),
 	fetchRawChainData: vi.fn(async () => null)
 }));
@@ -32,8 +32,8 @@ import {
 	executeNetworkAdminOperation,
 	networkAdminOperationFailure
 } from './network-admin-executor';
-import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
-import { useWalletSyncChannel } from '$lib/wallet/core/wallet-sync';
+import { saveServiceEndpoints } from '#lib/onboarding/core/storage.ts';
+import { useWalletSyncChannel } from '#lib/wallet/core/wallet-sync.ts';
 
 const effect = (operation: NetEffect['operation']): NetEffect => ({ id: 1, operation });
 
@@ -241,7 +241,7 @@ describe('retire_provider_keys (owner decision 2026-10-29)', () => {
 	});
 
 	it('keeps the keys when the configs could not be written', async () => {
-		const { setItem } = await import('$lib/services/storage');
+		const { setItem } = await import('#lib/services/storage.ts');
 		vi.mocked(setItem).mockRejectedValueOnce(new Error('quota'));
 		kv.set('vela.rpcProviders', JSON.stringify({ alchemy: 'fake-key' }));
 		const result = await executeNetworkAdminOperation(
@@ -256,7 +256,7 @@ describe('retire_provider_keys (owner decision 2026-10-29)', () => {
 	});
 
 	it('says the keys are still there when only their delete failed', async () => {
-		const { removeItem } = await import('$lib/services/storage');
+		const { removeItem } = await import('#lib/services/storage.ts');
 		vi.mocked(removeItem).mockRejectedValueOnce(new Error('blocked'));
 		const result = await executeNetworkAdminOperation(
 			effect({ type: 'retire_provider_keys', configs: [config] })
@@ -342,7 +342,7 @@ describe('fetch_search_index', () => {
 
 describe('fetch_chain_info', () => {
 	it('hands the core the document’s slip44, whose meaning is the core’s (set-5)', async () => {
-		const { fetchRawChainData } = await import('$lib/services/chain-registry');
+		const { fetchRawChainData } = await import('#lib/services/chain-registry.ts');
 		const doc = (extra: Record<string, unknown>) => ({
 			chainId: 10200,
 			name: 'Gnosis Chiado Testnet',

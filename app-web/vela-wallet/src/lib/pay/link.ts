@@ -13,10 +13,10 @@
  * This module only reads the query, words a refusal from the corpus, and puts
  * an accepted request into the send's open params. Pure; no wasm.
  */
-import type { PayRefusal } from '$lib/core/generated/PayRefusal';
-import type { PayRequest } from '$lib/core/generated/PayRequest';
-import type { SendOpenParams } from '$lib/core/generated/SendOpenParams';
-import type { RawPayQuery } from '$lib/flows/core/payment-request';
+import type { PayRefusal } from '#lib/core/generated/PayRefusal.ts';
+import type { PayRequest } from '#lib/core/generated/PayRequest.ts';
+import type { SendOpenParams } from '#lib/core/generated/SendOpenParams.ts';
+import type { RawPayQuery } from '#lib/flows/core/payment-request.ts';
 
 /** The query parameters a pay link carries — the builder's, in its order. */
 export const PAY_PARAMS = ['to', 'chain', 'token', 'amount', 'sym', 'dec', 'net'] as const;

@@ -22,7 +22,7 @@
 	 */
 	import AckRow from '../AckRow.svelte';
 	import NameField from '../NameField.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 
 	interface Props {
 		name: string;

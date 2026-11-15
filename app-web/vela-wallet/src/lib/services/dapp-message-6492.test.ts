@@ -7,9 +7,9 @@
  * A fresh account has no code for `isValidSignature` to run; without the
  * envelope its sign-in verifies nowhere.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { hashTypedData, keccak256 } from '$lib/core/kernels';
+import { hashTypedData, keccak256 } from '#lib/core/kernels.ts';
 
 /** The parallel space's fixed keys and their Safes (`golden-addresses.test.ts`). */
 const FIXTURE_PUBLIC_KEYS = vi.hoisted(() => [
@@ -55,7 +55,7 @@ vi.mock('./networks', async (importOriginal) => ({
 	spaceNetworksSync: () => [{ chainId: 100 }, { chainId: 8453 }]
 }));
 /** The passkey: a well-formed assertion over exactly the challenge it is asked to sign. */
-vi.mock('$lib/signing/sign-challenge', () => ({
+vi.mock('#lib/signing/sign-challenge.ts', () => ({
 	signChallenge: vi.fn(async (challenge: Uint8Array) => {
 		const b64 = btoa(String.fromCharCode(...challenge))
 			.replace(/\+/g, '-')

@@ -9,8 +9,8 @@
  * in as a stranger.
  */
 import type { SettingsDesktopModel, SettingsHomeModel } from './model';
-import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
-import { IDENTICON_PLACEHOLDER_SVG } from '$lib/wallet/identicon-placeholder';
+import { shortenAddress, type WalletIdentity } from '#lib/wallet/identity.ts';
+import { IDENTICON_PLACEHOLDER_SVG } from '#lib/wallet/identicon-placeholder.ts';
 
 /** What the prerendered page carries before the session has answered. */
 export const EMPTY_ACCOUNT = {

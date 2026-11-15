@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import { intentAdvice, intentAdviceStanding } from '$lib/core/client';
+import { intentAdvice, intentAdviceStanding } from '#lib/core/client.ts';
 import {
 	ADVISOR_INSTRUCTIONS,
 	WATCH_MAX_MS,

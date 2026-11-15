@@ -20,8 +20,8 @@ const core = vi.hoisted(() => {
 		)
 	};
 });
-vi.mock('$app/environment', () => ({ browser: false }));
-vi.mock('$lib/core/client', () => core);
+vi.mock('$app/env', () => ({ browser: false }));
+vi.mock('#lib/core/client.ts', () => core);
 
 const { networkSpace } = await import('./network-space.svelte');
 
@@ -45,7 +45,7 @@ describe('networkSpace.boot', () => {
 describe('NetworkSpaceLayer', () => {
 	it('imports the intents only inside the switch’s answer', () => {
 		const source = readFileSync(join(import.meta.dirname, 'NetworkSpaceLayer.svelte'), 'utf8');
-		expect(source).not.toMatch(/^\s*import\s[^;]*\$lib\/intents/m);
-		expect(source).toContain("import('$lib/intents/index.svelte')");
+		expect(source).not.toMatch(/^\s*import\s[^;]*#lib\/intents/m);
+		expect(source).toContain("import('#lib/intents/index.svelte.ts')");
 	});
 });

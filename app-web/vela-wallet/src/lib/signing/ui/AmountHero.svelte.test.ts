@@ -10,7 +10,7 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import AmountHero from './AmountHero.svelte';
 import type { AmountLine } from '../model';
 

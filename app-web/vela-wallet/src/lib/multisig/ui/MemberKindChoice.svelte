@@ -12,8 +12,8 @@
 	 * from the members machine's entry or the accounts machine's
 	 * `member_kinds`; a pick goes back to it.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
 	import type { MultisigKindChoice } from '../generated/MultisigKindChoice';
 	import type { MultisigMemberKind } from '../generated/MultisigMemberKind';

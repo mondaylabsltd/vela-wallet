@@ -6,16 +6,16 @@
  * machine is the app-lifetime mirror of the network stores, and a second
  * entry point (spec 025's EIP-681 scan recovery) must share the same ledger
  * or the core-owned duplicate-chain gate reads the wrong one. Svelte 5 shape
- * per `$lib/session/core/session.svelte.ts`: `$state` view, idempotent
+ * per `#lib/session/core/session.svelte.ts`: `$state` view, idempotent
  * `boot()`, one-liner dispatch methods.
  */
 
-import { loadCore, NetworkAdminCore } from '$lib/core/client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import type { NetEvent } from '$lib/core/generated/NetEvent';
-import type { NetShellResult } from '$lib/core/generated/NetShellResult';
-import type { NetView } from '$lib/core/generated/NetView';
+import { loadCore, NetworkAdminCore } from '#lib/core/client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import type { NetEvent } from '#lib/core/generated/NetEvent.ts';
+import type { NetShellResult } from '#lib/core/generated/NetShellResult.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
 import type { NetEffect } from './network-admin-types';
 import {
 	executeNetworkAdminOperation,

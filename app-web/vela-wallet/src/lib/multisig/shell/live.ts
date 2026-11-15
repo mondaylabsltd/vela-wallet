@@ -9,15 +9,20 @@
  * as what it was ({@link ShellFailure}, carried as the `detail` the core
  * hands back in its views), so the sheet can say it in the corpus' words.
  */
-import { loadAccounts } from '$lib/onboarding/core/storage';
-import { PasskeyError } from '$lib/onboarding/core/passkey';
-import { fromHex, multisigApprovalRoute, signingPlan, verifySafeWebAuthn } from '$lib/core/kernels';
-import { findAccountByAddress } from '$lib/services/accounts';
-import { pollUserOpStatus } from '$lib/services/tx-reconciler';
-import { resolveRecipientRisk } from '$lib/services/recipient-risk';
-import { rpcSimulateReply } from '$lib/services/sim/sim-engine-rpc';
-import { chainFailing, PoolFailedError, poolRpcCall } from '$lib/services/rpc-pool';
-import { corroboratedRpc } from '$lib/services/corroborated-read';
+import { loadAccounts } from '#lib/onboarding/core/storage.ts';
+import { PasskeyError } from '#lib/onboarding/core/passkey.ts';
+import {
+	fromHex,
+	multisigApprovalRoute,
+	signingPlan,
+	verifySafeWebAuthn
+} from '#lib/core/kernels.ts';
+import { findAccountByAddress } from '#lib/services/accounts.ts';
+import { pollUserOpStatus } from '#lib/services/tx-reconciler.ts';
+import { resolveRecipientRisk } from '#lib/services/recipient-risk.ts';
+import { rpcSimulateReply } from '#lib/services/sim/sim-engine-rpc.ts';
+import { chainFailing, PoolFailedError, poolRpcCall } from '#lib/services/rpc-pool.ts';
+import { corroboratedRpc } from '#lib/services/corroborated-read.ts';
 import {
 	EstimateGasError,
 	keySetOf,
@@ -25,15 +30,15 @@ import {
 	UserOpNotSentError,
 	type QuotedInBandFee,
 	type SignFn
-} from '$lib/services/safe-transaction';
+} from '#lib/services/safe-transaction.ts';
 import {
 	PageDeclinedError,
 	PageSignFailedError,
 	signChallenge,
 	VenueBlockedError
-} from '$lib/signing/sign-challenge';
-import { requestFirstPartyTransaction } from '$lib/backup/ethereum-backup';
-import { signRequest } from '$lib/signing/core/sign-resident.svelte';
+} from '#lib/signing/sign-challenge.ts';
+import { requestFirstPartyTransaction } from '#lib/backup/ethereum-backup.ts';
+import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
 import { riskConfirmation } from '../core/gate.svelte';
 import { approveOnPage, PageApprovalError } from '../core/page-approval.svelte';
 import { quoteExecutionFee } from '../core/execution-fee';

@@ -14,11 +14,11 @@
 import { tick } from 'svelte';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { CreateWalletCore, loadCore } from '$lib/core/client';
-import { CREATE_FIXTURES } from '$lib/onboarding/v2-fixtures';
-import type { CreateView } from '$lib/onboarding/generated/CreateView';
-import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+import '#lib/tokens/tokens.css';
+import { CreateWalletCore, loadCore } from '#lib/core/client.ts';
+import { CREATE_FIXTURES } from '#lib/onboarding/v2-fixtures.ts';
+import type { CreateView } from '#lib/onboarding/generated/CreateView.ts';
+import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
 import en from '../../../../../../../assets/i18n/en.json';
 import zh from '../../../../../../../assets/i18n/zh.json';
 import KeysScreen from './KeysScreen.svelte';

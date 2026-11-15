@@ -7,7 +7,7 @@
  * week, so the two gates stay separate flags rather than one shared "first run"
  * that would have to compromise between them.
  *
- * Storage is best-effort in exactly the way `$lib/launch/constants` is: private
+ * Storage is best-effort in exactly the way `#lib/launch/constants.ts` is: private
  * modes and sandboxed frames throw on `localStorage`, and a wallet's front door
  * must not break because a decoration could not read a flag. When we cannot
  * tell, we show it — a second viewing is a cost; a broken first run is not.
@@ -41,7 +41,7 @@ export function markIntroSeen(win: Window = window, now: number = Date.now()): v
 	}
 }
 
-/** Where the signed-in wallets live (`$lib/onboarding/core/storage` STORAGE_KEYS.accounts). */
+/** Where the signed-in wallets live (`#lib/onboarding/core/storage.ts` STORAGE_KEYS.accounts). */
 export const ACCOUNTS_KEY = 'vela.accounts';
 
 /** Welcome opened on purpose: to sign into ANOTHER wallet, or sent here by a session that holds none. */

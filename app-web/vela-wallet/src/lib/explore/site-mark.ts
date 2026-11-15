@@ -17,8 +17,8 @@
  * **`loadCore()` must have resolved** (or, while prerendering, the build-time
  * engine must be up — it always is where a page's strings are resolved).
  */
-import { dappOriginLock } from '$lib/core/client';
-import type { OriginLock } from '$lib/core/generated/OriginLock';
+import { dappOriginLock } from '#lib/core/client.ts';
+import type { OriginLock } from '#lib/core/generated/OriginLock.ts';
 import type { ExploreMessages } from './messages';
 import type { SiteMarkModel } from './model';
 

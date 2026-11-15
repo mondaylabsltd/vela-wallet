@@ -1,41 +1,45 @@
 <script lang="ts">
-	import '$lib/tokens/tokens.css';
+	import '#lib/tokens/tokens.css';
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import LaunchAnimation from '$lib/launch/LaunchAnimation.svelte';
-	import { markPlayed, shouldPlay, type Appearance } from '$lib/launch/constants';
+	import LaunchAnimation from '#lib/launch/LaunchAnimation.svelte';
+	import { markPlayed, shouldPlay, type Appearance } from '#lib/launch/constants.ts';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { updated } from '$app/state';
-	import { version } from '$app/environment';
-	import { installChunkRecovery } from '$lib/services/chunk-recovery';
-	import { ensureCustomNetworks } from '$lib/services/networks';
-	import { invalidateAllPools } from '$lib/services/rpc-pool';
-	import { isPackagedApp, normalizePackagedUrl } from '$lib/extension/page-url';
-	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
-	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
-	import ExtensionNotices from '$lib/extension/ExtensionNotices.svelte';
-	import type { ExtensionMessages } from '$lib/extension/messages';
-	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
-	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
-	import { oneSurface, type SurfaceRole } from '$lib/extension/one-surface.svelte';
-	import StepAside from '$lib/extension/StepAside.svelte';
+	import { version } from '$app/env';
+	import { installChunkRecovery } from '#lib/services/chunk-recovery.ts';
+	import { ensureCustomNetworks } from '#lib/services/networks.ts';
+	import { invalidateAllPools } from '#lib/services/rpc-pool.ts';
+	import { isPackagedApp, normalizePackagedUrl } from '#lib/extension/page-url.ts';
+	import ParallelSpaceBadge from '#lib/dev/ParallelSpaceBadge.svelte';
+	import ReportToastHost from '#lib/settings/ui/ReportToastHost.svelte';
+	import ExtensionNotices from '#lib/extension/ExtensionNotices.svelte';
+	import type { ExtensionMessages } from '#lib/extension/messages.ts';
+	import { parallelFlagSet } from '#lib/dev/parallel-flag.svelte.ts';
+	import {
+		isPanelDocument,
+		panelNeedsWallet,
+		panelSurface
+	} from '#lib/dapp/panel-surface.svelte.ts';
+	import { oneSurface, type SurfaceRole } from '#lib/extension/one-surface.svelte.ts';
+	import StepAside from '#lib/extension/StepAside.svelte';
 	import { isWalletPageUrl } from '../../extension/lib/one-surface.js';
-	import { inExtension } from '$lib/dapp/transport';
-	import { session } from '$lib/session/core/session.svelte';
-	import { agentSettings } from '$lib/agent/settings.svelte';
-	import type { AgentMessages } from '$lib/agent/messages';
-	import NetworkSpaceLayer from '$lib/network-space/NetworkSpaceLayer.svelte';
-	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { whenCoreLoaded } from '$lib/core/client';
-	import { localeOfPath, textDirectionOf, toLocale } from '$lib/i18n/locales';
+	import { inExtension } from '#lib/dapp/transport.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { agentSettings } from '#lib/agent/settings.svelte.ts';
+	import type { AgentMessages } from '#lib/agent/messages.ts';
+	import NetworkSpaceLayer from '#lib/network-space/NetworkSpaceLayer.svelte';
+	import type { NetworkSpaceMessages } from '#lib/network-space/messages.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import { whenCoreLoaded } from '#lib/core/client.ts';
+	import { localeOfPath, textDirectionOf, toLocale } from '#lib/i18n/locales.ts';
 	// The CJK face's stylesheet as a URL, not a bundled import: linked below on
 	// the CJK locales only (perf-9).
-	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
-	import { trackPageview } from '$lib/analytics';
-	import { installProductionWriteGuard } from '$lib/services/production-guard';
+	import { setPageLanguage } from '#lib/i18n/page-language.svelte.ts';
+	import { trackPageview } from '#lib/analytics/index.ts';
+	import { installProductionWriteGuard } from '#lib/services/production-guard.ts';
 
 	// §28: a test build (the dev server, the extension's development package)
 	// never writes to production — in front of `fetch` before any request.
@@ -63,16 +67,22 @@
 	 * back. Identity on the hosted site — decided by this page's origin, not by
 	 * a build flag.
 	 */
-	afterNavigate(() => normalizePackagedUrl());
+	afterNavigate(({ shallow, type }) => {
+		if (shallow && type === 'goto') return;
+		normalizePackagedUrl();
+	});
 
 	/**
-	 * A page view per navigation — the first-party sender (`$lib/analytics`),
+	 * A page view per navigation — the first-party sender (`#lib/analytics/index.ts`),
 	 * declared in the privacy policy. It names the ROUTE, never the address
 	 * bar: no query string, no fragment, no identifier in the path. It sends
 	 * only from the hosted wallet and the packaged extension, never under
 	 * automation, and never once Settings → About has it switched off.
 	 */
-	afterNavigate(({ to }) => trackPageview(to?.route.id ?? null));
+	afterNavigate(({ to, shallow, type }) => {
+		if (shallow && type === 'goto') return;
+		trackPageview(to?.route.id ?? null);
+	});
 
 	/**
 	 * The locale this document is in — from its path, not `page.params`, which
@@ -130,7 +140,8 @@
 	 * version (`kit.version.pollInterval` in vite.config.ts); when it moved,
 	 * the next navigation is a full document load rather than a client one.
 	 */
-	beforeNavigate(({ to, willUnload }) => {
+	beforeNavigate(({ to, willUnload, shallow, type }) => {
+		if (shallow && type === 'goto') return;
 		if (updated.current && to?.url && !willUnload) location.href = to.url.href;
 	});
 
@@ -175,14 +186,14 @@
 	// — the bridge dials and its layer (the bar, the requests to approve)
 	// comes up over every page.
 	let agent = $state<{
-		bridge: (typeof import('$lib/agent/bridge.svelte'))['agentBridge'];
-		Layer: (typeof import('$lib/agent/AgentLayer.svelte'))['default'];
+		bridge: (typeof import('#lib/agent/bridge.svelte.ts'))['agentBridge'];
+		Layer: (typeof import('#lib/agent/AgentLayer.svelte'))['default'];
 	} | null>(null);
 	$effect(() => {
 		if (!agentSettings.enabled || agent !== null) return;
 		void Promise.all([
-			import('$lib/agent/bridge.svelte'),
-			import('$lib/agent/AgentLayer.svelte')
+			import('#lib/agent/bridge.svelte.ts'),
+			import('#lib/agent/AgentLayer.svelte')
 		]).then(([bridge, layer]) => {
 			bridge.agentBridge.sync();
 			agent = { bridge: bridge.agentBridge, Layer: layer.default };
@@ -211,7 +222,7 @@
 	 */
 	onMount(() => {
 		void whenCoreLoaded()
-			.then(() => import('$lib/settings/core/network-admin.svelte'))
+			.then(() => import('#lib/settings/core/network-admin.svelte.ts'))
 			.then(({ networkAdmin }) => networkAdmin.boot())
 			.catch(() => {});
 	});
@@ -220,7 +231,7 @@
 		if (!inExtension()) return;
 		let stop: (() => void) | undefined;
 		let gone = false;
-		void import('$lib/dapp/follow').then((follow) => {
+		void import('#lib/dapp/follow.ts').then((follow) => {
 			if (gone) return;
 			void follow.normalizeGrantSpelling();
 			stop = $effect.root(() => {
@@ -347,7 +358,7 @@
 		// chunk of every page, Welcome included.
 		try {
 			if (import.meta.env.DEV || localStorage.getItem('vela.dev.console') === '1') {
-				void import('$lib/services/dev-console').then((m) => m.maybeInstallDevConsole());
+				void import('#lib/services/dev-console.ts').then((m) => m.maybeInstallDevConsole());
 			}
 		} catch {
 			// storage denied — no console, no harm
@@ -358,7 +369,7 @@
 		// its key material stay behind this dynamic import, so a real visit
 		// never loads them.
 		if (parallelFlagSet()) {
-			void import('$lib/dev/parallel-space').then((m) => {
+			void import('#lib/dev/parallel-space.ts').then((m) => {
 				void m.applyParallelSpaceOnBoot();
 				m.installParallelConsole();
 			});

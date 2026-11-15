@@ -13,14 +13,14 @@
  * keeps ownership of classification.
  */
 
-import { fetchErc20Meta } from '$lib/services/erc20-meta';
-import { hapticSuccess } from '$lib/services/platform';
-import { loadCustomTokens, removeCustomToken, saveCustomToken } from '$lib/services/records';
-import { clearTokenCache } from '$lib/services/wallet-api';
-import type { CustomToken } from '$lib/services/tokens-model';
+import { fetchErc20Meta } from '#lib/services/erc20-meta.ts';
+import { hapticSuccess } from '#lib/services/platform.ts';
+import { loadCustomTokens, removeCustomToken, saveCustomToken } from '#lib/services/records.ts';
+import { clearTokenCache } from '#lib/services/wallet-api.ts';
+import type { CustomToken } from '#lib/services/tokens-model.ts';
 
-import type { MtokCustomToken } from '$lib/core/generated/MtokCustomToken';
-import type { MtokShellResult } from '$lib/core/generated/MtokShellResult';
+import type { MtokCustomToken } from '#lib/core/generated/MtokCustomToken.ts';
+import type { MtokShellResult } from '#lib/core/generated/MtokShellResult.ts';
 import type { ManageTokensEffect, ManageTokensSessionOptions } from './manage-tokens-types';
 
 /**

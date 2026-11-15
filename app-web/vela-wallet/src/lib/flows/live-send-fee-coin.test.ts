@@ -9,15 +9,15 @@
  * this pins that the web draws what it says, through the REAL send core, and
  * that the fee card's coin reaches it (`fee_token_changed`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendShellResult } from '$lib/core/generated/SendShellResult';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import type { WalletIdentity } from '$lib/wallet/identity';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendShellResult } from '#lib/core/generated/SendShellResult.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
 import { SendCore } from '../../../../../rust/pkg-web/vela_core.js';
 import type { SendEffect } from './core/send-types';
 import { FeeTokenWord } from './core/send-estimates';

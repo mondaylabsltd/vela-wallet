@@ -16,14 +16,14 @@
  *     is refused, not silently re-signed (spec 089);
  *   - a public plain-http origin is not asked to sign for (spec 089).
  */
-import { loadCore } from '$lib/core/client';
-import type { DpermRespondPayload } from '$lib/core/generated/DpermRespondPayload';
+import { loadCore } from '#lib/core/client.ts';
+import type { DpermRespondPayload } from '#lib/core/generated/DpermRespondPayload.ts';
 import { decidePopupRequest } from './core/dperm-popup';
 import { planPopupConnect } from './core/dperm-connect';
 import { dpermRejectMessage, toWireGrant } from './core/dperm-types';
 import { getGrant, setGrant } from './grants';
 import { answerRequest, type ExtensionRequest } from './transport';
-import { AskerGoneError } from '$lib/signing/core/sign-types';
+import { AskerGoneError } from '#lib/signing/core/sign-types.ts';
 import type { PopupVerdict } from './core/dperm-types';
 
 /**
@@ -185,8 +185,8 @@ async function saveConnectionRecord(record: {
 	origin: string;
 }): Promise<void> {
 	const [{ buildConnectionRecord }, { saveTransaction }] = await Promise.all([
-		import('$lib/services/dapp-history'),
-		import('$lib/services/records')
+		import('#lib/services/dapp-history.ts'),
+		import('#lib/services/records.ts')
 	]);
 	await saveTransaction(
 		buildConnectionRecord({

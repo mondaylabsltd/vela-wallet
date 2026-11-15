@@ -6,7 +6,7 @@
  * browser engine and a real dApp registry arrive, they replace the fixture
  * layer that builds these and nothing else.
  */
-import type { OriginLock } from '$lib/core/generated/OriginLock';
+import type { OriginLock } from '#lib/core/generated/OriginLock.ts';
 
 export type ExploreStateId =
 	| 'e1'

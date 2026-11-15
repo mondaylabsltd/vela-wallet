@@ -11,14 +11,14 @@ const sources = {
 	chainlinkThrows: false,
 	fxThrows: false
 };
-vi.mock('$lib/services/fiat-rates', () => ({
+vi.mock('#lib/services/fiat-rates.ts', () => ({
 	isChainlinkFiat: (code: string) => ['EUR', 'JPY'].includes(code),
 	getChainlinkRate: vi.fn(async () => {
 		if (sources.chainlinkThrows) throw new Error('rpc down');
 		return sources.chainlink;
 	})
 }));
-vi.mock('$lib/services/fiat-fx', () => ({
+vi.mock('#lib/services/fiat-fx.ts', () => ({
 	getFxRate: vi.fn(async () => {
 		if (sources.fxThrows) throw new Error('endpoint down');
 		return sources.fx;

@@ -48,12 +48,12 @@
  * converted into the result variant that operation answers with.
  */
 
-import { PasskeyError } from '$lib/onboarding/core/passkey';
+import { PasskeyError } from '#lib/onboarding/core/passkey.ts';
 import {
 	PageDeclinedError,
 	PageSignFailedError,
 	VenueBlockedError
-} from '$lib/signing/sign-challenge';
+} from '#lib/signing/sign-challenge.ts';
 import {
 	attemptSilentSponsorship,
 	checkBundlerFunding,
@@ -63,20 +63,20 @@ import {
 	recommendedFundingWei,
 	underfundedRequiredWei,
 	type FundingNeeded
-} from '$lib/services/bundler-service';
-import { buildSigningRecord } from '$lib/services/dapp-history';
-import { nativeSymbol } from '$lib/services/networks';
-import { deleteTransaction, saveTransaction, updateTransaction } from '$lib/services/records';
-import { serializeAssetSim } from '$lib/services/sim/tx-simulation';
+} from '#lib/services/bundler-service.ts';
+import { buildSigningRecord } from '#lib/services/dapp-history.ts';
+import { nativeSymbol } from '#lib/services/networks.ts';
+import { deleteTransaction, saveTransaction, updateTransaction } from '#lib/services/records.ts';
+import { serializeAssetSim } from '#lib/services/sim/tx-simulation.ts';
 import {
 	DAppReceiptPendingError,
 	DAppRevertedError,
 	handleDAppRequest,
 	type DAppSubmitHooks,
 	type SigningAccount
-} from '$lib/services/dapp-submit';
-import { UserOpNotSentError } from '$lib/services/safe-transaction';
-import { userOpExpiredDetail } from '$lib/core/kernels';
+} from '#lib/services/dapp-submit.ts';
+import { UserOpNotSentError } from '#lib/services/safe-transaction.ts';
+import { userOpExpiredDetail } from '#lib/core/kernels.ts';
 import {
 	dappReceiptWaitMs,
 	rpcReadTimeoutMs,
@@ -84,15 +84,15 @@ import {
 	signErrorWords,
 	userOpNotSentDetail,
 	userOpWriteAheadWaitMs
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 
-import { poolCorroboratedCall } from '$lib/services/rpc-pool';
-import type { SafeOwnerAnswer } from '$lib/core/generated/SafeOwnerAnswer';
-import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
-import type { SignShellResult } from '$lib/core/generated/SignShellResult';
+import { poolCorroboratedCall } from '#lib/services/rpc-pool.ts';
+import type { SafeOwnerAnswer } from '#lib/core/generated/SafeOwnerAnswer.ts';
+import type { SignFundingNeeded } from '#lib/core/generated/SignFundingNeeded.ts';
+import type { SignShellResult } from '#lib/core/generated/SignShellResult.ts';
 import type { SignEffect, SignShellPorts } from './sign-types';
 import { AskerGoneError, signErrorMessage, WriteAheadTimeoutError } from './sign-types';
-import { wireTier } from '$lib/flows/core/wire-tier';
+import { wireTier } from '#lib/flows/core/wire-tier.ts';
 
 export { signErrorMessage } from './sign-types';
 

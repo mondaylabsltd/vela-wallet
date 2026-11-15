@@ -8,14 +8,14 @@
 	 * member, a Vela account's too: anyone can match these against another
 	 * device before the passkey.
 	 */
-	import AgentAdviceCard from '$lib/signing/ui/AgentAdviceCard.svelte';
-	import TechDetails from '$lib/signing/ui/TechDetails.svelte';
-	import type { AgentAdviceCardModel } from '$lib/agent/advisor';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import AgentAdviceCard from '#lib/signing/ui/AgentAdviceCard.svelte';
+	import TechDetails from '#lib/signing/ui/TechDetails.svelte';
+	import type { AgentAdviceCardModel } from '#lib/agent/advisor.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
 	import type { MultisigReviewOut } from '../core/kernel';
-	import type { TechModel } from '$lib/signing/model';
+	import type { TechModel } from '#lib/signing/model.ts';
 	import { hashRows } from '../core/review-blocks';
 
 	interface Props {

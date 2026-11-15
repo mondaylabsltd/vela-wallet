@@ -12,20 +12,20 @@
  * cut to the token ladder, never rounded up, dust kept); the web draws that,
  * with the person's decimal mark, and does no arithmetic of its own.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SendCore } from '$lib/core/client';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendOperation } from '$lib/core/generated/SendOperation';
-import type { SendRecipientDraft } from '$lib/core/generated/SendRecipientDraft';
-import type { SendShellResult } from '$lib/core/generated/SendShellResult';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { preferences } from '$lib/services/preferences.svelte';
-import { tokenAmountText } from '$lib/wallet/live';
+import { SendCore } from '#lib/core/client.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendOperation } from '#lib/core/generated/SendOperation.ts';
+import type { SendRecipientDraft } from '#lib/core/generated/SendRecipientDraft.ts';
+import type { SendShellResult } from '#lib/core/generated/SendShellResult.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { preferences } from '#lib/services/preferences.svelte.ts';
+import { tokenAmountText } from '#lib/wallet/live.ts';
 import { buildFlowState } from './fixtures';
 import { liveSendForm, sendTokenId } from './live-send';
 

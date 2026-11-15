@@ -16,10 +16,10 @@
  * doorway cannot load the core before its first navigation, so the
  * correspondence is pinned here against `prefsRead`.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { prefsRead } from '$lib/core/client';
-import { PREF_KEYS } from '$lib/services/preferences.svelte';
+import { prefsRead } from '#lib/core/client.ts';
+import { PREF_KEYS } from '#lib/services/preferences.svelte.ts';
 import {
 	LANGUAGE_KEY,
 	LOCALES,

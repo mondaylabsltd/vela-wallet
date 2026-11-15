@@ -7,7 +7,7 @@
 	 * the same file.
 	 */
 	import IntroArt from './IntroArt.svelte';
-	import type { IntroArtId } from '$lib/intro/art';
+	import type { IntroArtId } from '#lib/intro/art.ts';
 
 	interface Props {
 		art: IntroArtId;

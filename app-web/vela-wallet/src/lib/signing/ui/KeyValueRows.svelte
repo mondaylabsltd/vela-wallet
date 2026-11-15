@@ -1,5 +1,5 @@
 <script lang="ts">
-	import AddressText from '$lib/ui/AddressText.svelte';
+	import AddressText from '#lib/ui/AddressText.svelte';
 	import SourceMark from './SourceMark.svelte';
 	import type { KeyValueRow } from '../model';
 

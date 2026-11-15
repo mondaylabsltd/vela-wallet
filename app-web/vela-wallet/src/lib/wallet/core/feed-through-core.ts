@@ -4,10 +4,10 @@
  * words, not a fixture's. Test-only: nothing on a page imports it, and it
  * loads the wasm the way the build-time i18n does.
  */
-import type { FeedEvent } from '$lib/core/generated/FeedEvent';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { FeedEvent } from '#lib/core/generated/FeedEvent.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import { toFeedRecord } from './feed-executor';
 
 /** The view after the store loaded `records`, then each of `events` in turn. */
@@ -17,8 +17,8 @@ export async function feedViewThroughCore(
 	nowMs: number,
 	events: FeedEvent[] = []
 ): Promise<FeedView> {
-	await import('$lib/i18n/wasm-init.server');
-	const { ActivityFeedCore } = await import('$lib/core/client');
+	await import('#lib/i18n/wasm-init.server.ts');
+	const { ActivityFeedCore } = await import('#lib/core/client.ts');
 	const core = new ActivityFeedCore();
 	type Result = {
 		view: FeedView;

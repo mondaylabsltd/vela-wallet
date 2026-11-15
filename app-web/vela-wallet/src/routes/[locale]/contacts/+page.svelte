@@ -17,26 +17,26 @@
 	 * into events, hands files in and out, and carries a person to /wallet
 	 * when they want to move money (`contact-handoff.ts`).
 	 */
-	import { markHistory } from '$lib/ui/history';
-	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
+	import { markHistory } from '#lib/ui/history.ts';
+	import CoreWaiting from '#lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { STAY_QUERY } from '$lib/intro/gate';
+	import { STAY_QUERY } from '#lib/intro/gate.ts';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
-	import ContactsDesktop from '$lib/contacts/ContactsDesktop.svelte';
-	import ContactsHome from '$lib/contacts/ContactsHome.svelte';
-	import ContactEditSheet from '$lib/contacts/ui/ContactEditSheet.svelte';
-	import GroupEditSheet from '$lib/contacts/ui/GroupEditSheet.svelte';
-	import GroupForm from '$lib/contacts/ui/GroupForm.svelte';
-	import PickList from '$lib/contacts/ui/PickList.svelte';
-	import SheetOrDialog from '$lib/contacts/ui/SheetOrDialog.svelte';
-	import type { ContactDraft, ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
-	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-	import { intents } from '$lib/intents/index.svelte';
-	import { screenDesk } from '$lib/flows/screen-desk.svelte';
-	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
-	import { addMenu, groupMenuMobile } from '$lib/contacts/fixtures';
+	import ContactsDesktop from '#lib/contacts/ContactsDesktop.svelte';
+	import ContactsHome from '#lib/contacts/ContactsHome.svelte';
+	import ContactEditSheet from '#lib/contacts/ui/ContactEditSheet.svelte';
+	import GroupEditSheet from '#lib/contacts/ui/GroupEditSheet.svelte';
+	import GroupForm from '#lib/contacts/ui/GroupForm.svelte';
+	import PickList from '#lib/contacts/ui/PickList.svelte';
+	import SheetOrDialog from '#lib/contacts/ui/SheetOrDialog.svelte';
+	import type { ContactDraft, ContactFormCopy, GroupFormCopy } from '#lib/contacts/forms.ts';
+	import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+	import { intents } from '#lib/intents/index.svelte.ts';
+	import { screenDesk } from '#lib/flows/screen-desk.svelte.ts';
+	import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
+	import { addMenu, groupMenuMobile } from '#lib/contacts/fixtures.ts';
 	import {
 		buildContactsDesktopLive,
 		buildContactsLive,
@@ -45,30 +45,30 @@
 		importReport,
 		memberPickModel,
 		type ContactsUiState
-	} from '$lib/contacts/live';
-	import type { ContactsUiEvent } from '$lib/contacts/ui-events';
-	import type { ContactExportScope } from '$lib/core/generated/ContactExportScope';
-	import type { ContactFileFormat } from '$lib/core/generated/ContactFileFormat';
-	import { flowHandoffQuery, type FlowHandoff } from '$lib/flows/contact-handoff';
-	import { pickFile, saveTextFile } from '$lib/services/file-io';
-	import { preferences } from '$lib/services/preferences.svelte';
-	import { session } from '$lib/session/core/session.svelte';
-	import AccountSwitcher from '$lib/session/ui/AccountSwitcher.svelte';
-	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
-	import Dialog from '$lib/settings/ui/Dialog.svelte';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
-	import Button from '$lib/ui/Button.svelte';
-	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { feed } from '$lib/wallet/core/feed.svelte';
-	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { shortenAddress } from '$lib/wallet/identity';
-	import { fill } from '$lib/wallet/messages';
-	import { track } from '$lib/analytics';
+	} from '#lib/contacts/live.ts';
+	import type { ContactsUiEvent } from '#lib/contacts/ui-events.ts';
+	import type { ContactExportScope } from '#lib/core/generated/ContactExportScope.ts';
+	import type { ContactFileFormat } from '#lib/core/generated/ContactFileFormat.ts';
+	import { flowHandoffQuery, type FlowHandoff } from '#lib/flows/contact-handoff.ts';
+	import { pickFile, saveTextFile } from '#lib/services/file-io.ts';
+	import { preferences } from '#lib/services/preferences.svelte.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import AccountSwitcher from '#lib/session/ui/AccountSwitcher.svelte';
+	import IdenticonViewerHost from '#lib/wallet/ui/IdenticonViewerHost.svelte';
+	import Dialog from '#lib/settings/ui/Dialog.svelte';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
+	import Button from '#lib/ui/Button.svelte';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
+	import { feed } from '#lib/wallet/core/feed.svelte.ts';
+	import { WEB_DESTINATIONS } from '#lib/wallet/destinations.ts';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+	import { shortenAddress } from '#lib/wallet/identity.ts';
+	import { fill } from '#lib/wallet/messages.ts';
+	import { track } from '#lib/analytics/index.ts';
 	import type { PageProps } from './$types';
-	import { multisig } from '$lib/multisig/core/store.svelte';
-	import { shownIdentity } from '$lib/multisig/core/shown';
-	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import { multisig } from '#lib/multisig/core/store.svelte.ts';
+	import { shownIdentity } from '#lib/multisig/core/shown.ts';
+	import MultisigHost from '#lib/multisig/ui/MultisigHost.svelte';
 
 	let { data }: PageProps = $props();
 	const m = $derived(data.contactsMessages);
@@ -118,7 +118,7 @@
 	});
 
 	$effect(() => {
-		if (sessionView.allowed_route === 'onboarding') void goto(welcome, { replaceState: true });
+		if (sessionView.allowed_route === 'onboarding') void goto(welcome, { replace: true });
 	});
 
 	$effect(() => {

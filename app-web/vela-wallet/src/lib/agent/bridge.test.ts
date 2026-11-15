@@ -58,36 +58,36 @@ vi.mock('./clientmcp', () => ({
 
 /** The core's verdict on reading, by operation id (`null`: the review). */
 const reads = new Map<string | null, { code: string; detail: string } | null>();
-vi.mock('$lib/core/client', () => ({
+vi.mock('#lib/core/client.ts', () => ({
 	loadCore: () => Promise.resolve(),
 	intentCatalog: () => '[]',
 	intentAgentReads: (_world: string, operation?: string) =>
 		JSON.stringify(reads.get(operation ?? null) ?? null)
 }));
 const stop = vi.fn();
-vi.mock('$lib/intents/index.svelte', () => ({
+vi.mock('#lib/intents/index.svelte.ts', () => ({
 	intents: { stop, invoke: vi.fn(), approvals: [], activity: [] },
 	world: () => ({})
 }));
-vi.mock('$lib/intents/world', () => ({ worldJson: () => '{}' }));
-vi.mock('$lib/intents/state', () => ({ agentState: () => ({}) }));
+vi.mock('#lib/intents/world', () => ({ worldJson: () => '{}' }));
+vi.mock('#lib/intents/state.ts', () => ({ agentState: () => ({}) }));
 const operation = { id: 'transfer-1', state: 'awaiting_confirmation' };
-vi.mock('$lib/intents/transfers.svelte', () => ({
+vi.mock('#lib/intents/transfers.svelte.ts', () => ({
 	transfers: { get: (id: string) => (id === operation.id ? operation : null), current: () => null }
 }));
-vi.mock('$lib/intents/review', () => ({ reviewOf: () => ({ note: 'n', transfer: null }) }));
-vi.mock('$lib/flows/send-desk.svelte', () => ({ sendDesk: { port: null } }));
+vi.mock('#lib/intents/review', () => ({ reviewOf: () => ({ note: 'n', transfer: null }) }));
+vi.mock('#lib/flows/send-desk.svelte.ts', () => ({ sendDesk: { port: null } }));
 const sessionView = { address: '' };
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: sessionView } }));
+vi.mock('#lib/session/core/session.svelte.ts', () => ({ session: { view: sessionView } }));
 const ensure = vi.fn(() => Promise.resolve());
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { ensure } }));
-vi.mock('$lib/signing/core/sign-resident.svelte', () => ({ signRequest: { view: {} } }));
-vi.mock('$lib/multisig/core/shown', () => ({ shownAddress: (a: string) => a }));
-vi.mock('$lib/settings/core/network-admin.svelte', () => ({
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({ contactsBook: { ensure } }));
+vi.mock('#lib/signing/core/sign-resident.svelte.ts', () => ({ signRequest: { view: {} } }));
+vi.mock('#lib/multisig/core/shown.ts', () => ({ shownAddress: (a: string) => a }));
+vi.mock('#lib/settings/core/network-admin.svelte.ts', () => ({
 	networkAdmin: { boot: () => Promise.resolve(), view: { loaded: false } }
 }));
-vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { view: null } }));
-vi.mock('$lib/wallet/core/feed.svelte', () => ({ feed: { view: null } }));
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({ balance: { view: null } }));
+vi.mock('#lib/wallet/core/feed.svelte.ts', () => ({ feed: { view: null } }));
 const settings = {
 	ready: true,
 	url: 'ws://127.0.0.1:8095/connect',

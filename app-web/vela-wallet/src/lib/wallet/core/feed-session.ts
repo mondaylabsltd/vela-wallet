@@ -10,15 +10,15 @@
  * `feed-session.ts` is the native counterpart and throws.
  */
 
-import { ActivityFeedCore } from '$lib/core/client';
+import { ActivityFeedCore } from '#lib/core/client.ts';
 
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
 
 import { createFeedExecutor } from './feed-executor';
-import type { FeedEvent } from '$lib/core/generated/FeedEvent';
-import type { FeedShellResult } from '$lib/core/generated/FeedShellResult';
-import type { FeedView } from '$lib/core/generated/FeedView';
+import type { FeedEvent } from '#lib/core/generated/FeedEvent.ts';
+import type { FeedShellResult } from '#lib/core/generated/FeedShellResult.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
 import type { FeedEffect, FeedSessionOptions } from './feed-types';
 
 export type ActivityFeedSession = EffectLoop<FeedEvent>;

@@ -3,7 +3,7 @@
  * refusal (RJ3/RJ6), "提交至网络…" for a may-have-been-sent op (G56), and every
  * reason key the core's `feeFailureReasonKey` can name (RJ13).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -12,10 +12,10 @@ import {
 	REFUSAL_KEYS,
 	rawResolve,
 	resolveSigningMessages
-} from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { feeFailureReasonKey } from '$lib/core/kernels';
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+} from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { feeFailureReasonKey } from '#lib/core/kernels.ts';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
 
 describe('the refusal resolves (RJ3, RJ6)', () => {
 	it.each(SUPPORTED_LOCALES)(

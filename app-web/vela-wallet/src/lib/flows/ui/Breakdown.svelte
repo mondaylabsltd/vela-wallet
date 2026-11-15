@@ -9,8 +9,8 @@
 	 * form's duplicate-payee warning there (issue 203), so the last screen
 	 * before a signature says it too.
 	 */
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import type { BreakdownRowModel } from '../model';
 
 	interface Props {

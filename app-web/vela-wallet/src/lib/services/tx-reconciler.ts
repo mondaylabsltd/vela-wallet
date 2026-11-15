@@ -25,7 +25,7 @@
 
 import { loadTransactions, updateTransaction } from './records';
 import { rpcCall, USER_OP_STATUS_METHOD } from './rpc-adapter';
-import { parseUserOpStatus } from '$lib/core/kernels';
+import { parseUserOpStatus } from '#lib/core/kernels.ts';
 import { autoAddReceivedTokens, type ReceiptLog } from './token-autoadd';
 
 /** Stop re-polling a pending submission after this age (it stays pending = unknown). */

@@ -11,7 +11,7 @@
  * owns what happens next.
  */
 
-import { isPackagedApp } from '$lib/extension/page-url';
+import { isPackagedApp } from '#lib/extension/page-url.ts';
 import type { FailureKind } from '../generated/FailureKind';
 import type { KeyMethod } from '../generated/KeyMethod';
 import type { PasskeyErrorFacts } from '../generated/PasskeyErrorFacts';
@@ -128,7 +128,7 @@ export function relyingPartyId(): string {
 	// Chrome permits an extension to claim a relying party it holds host
 	// permission for and no other; `extension/manifest.json`'s
 	// `https://getvela.app/*` entry is what unlocks this line, and
-	// `$lib/extension/package.test.ts` guards that the entry stays. Measured in
+	// `#lib/extension/package.test.ts` guards that the entry stays. Measured in
 	// spec 027 D31, down to the assertion's rpIdHash being sha256("getvela.app")
 	// whatever origin called for it — one passkey, one address, two doorways.
 	if (isPackagedApp()) return RELYING_PARTY_NATIVE;

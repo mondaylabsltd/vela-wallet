@@ -7,7 +7,7 @@
  * refusing or not reached is `not_sent`; the sheet words each kind from the
  * catalog (`review.failure`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const storage = new Map<string, string>();
@@ -18,22 +18,22 @@ vi.stubGlobal('localStorage', {
 });
 
 let thrown: unknown = null;
-vi.mock('$lib/services/safe-transaction', async (original) => ({
-	...(await original<typeof import('$lib/services/safe-transaction')>()),
+vi.mock('#lib/services/safe-transaction.ts', async (original) => ({
+	...(await original<typeof import('#lib/services/safe-transaction.ts')>()),
 	sendBatchCalls: async () => {
 		throw thrown;
 	}
 }));
 let failing = false;
-vi.mock('$lib/services/rpc-pool', async (original) => ({
-	...(await original<typeof import('$lib/services/rpc-pool')>()),
+vi.mock('#lib/services/rpc-pool.ts', async (original) => ({
+	...(await original<typeof import('#lib/services/rpc-pool.ts')>()),
 	chainFailing: () => failing
 }));
 
-const { EstimateGasError, UserOpNotSentError } = await import('$lib/services/safe-transaction');
+const { EstimateGasError, UserOpNotSentError } = await import('#lib/services/safe-transaction.ts');
 const { failureSaid } = await import('../core/review-door');
 const { detailError, ExecutionExpiredError } = await import('./proposal-failure');
-const { PoolFailedError } = await import('$lib/services/rpc-pool');
+const { PoolFailedError } = await import('#lib/services/rpc-pool.ts');
 const { liveDeps } = await import('./live');
 const deps = liveDeps({ peer: {} as never, notice: () => {} });
 

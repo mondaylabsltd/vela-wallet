@@ -17,7 +17,7 @@
 	import type { ReportDraft } from './report-draft.svelte';
 	import { toastAnchor } from './report-toast.svelte';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
-	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
+	import type { NetEndpointField } from '#lib/core/generated/NetEndpointField.ts';
 
 	import type {
 		AgentPanelModel,
@@ -30,8 +30,8 @@
 		SwitchRowModel
 	} from './model';
 	import type { SettingsPrefEvent } from './pref-events';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import TabBar from '$lib/wallet/ui/TabBar.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import TabBar from '#lib/wallet/ui/TabBar.svelte';
 	import AboutPanel from './ui/AboutPanel.svelte';
 	import AgentPanel from './ui/AgentPanel.svelte';
 	import AccountRow from './ui/AccountRow.svelte';

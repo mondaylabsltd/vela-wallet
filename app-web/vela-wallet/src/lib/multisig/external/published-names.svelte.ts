@@ -8,7 +8,7 @@
  * neither). A name is a hint, never authority.
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { lookupWalletName } from '$lib/services/public-key-index';
+import { lookupWalletName } from '#lib/services/public-key-index.ts';
 
 /** An index lookup nobody answered is asked again after this long. */
 const ASK_AGAIN_MS = 10_000;

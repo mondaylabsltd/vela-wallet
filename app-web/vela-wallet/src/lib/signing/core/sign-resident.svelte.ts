@@ -40,26 +40,26 @@
  *   receipt wait runs out — and a refusal or a "never sent" the sheet shows
  *   when the person closes it (spec 097 N4).
  */
-import { loadCore } from '$lib/core/client';
-import type { SignEvent } from '$lib/core/generated/SignEvent';
-import type { SignView } from '$lib/core/generated/SignView';
-import { spaceNetworksSync } from '$lib/services/networks';
-import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
+import { loadCore } from '#lib/core/client.ts';
+import type { SignEvent } from '#lib/core/generated/SignEvent.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import { spaceNetworksSync } from '#lib/services/networks.ts';
+import type { AssetSimResult } from '#lib/services/sim/tx-simulation.ts';
 import {
 	dispatchTxTracker,
 	subscribeInFlightOps,
 	subscribeTxTracker,
 	txTrackerView
-} from '$lib/wallet/core/tracker-resident';
-import { feed } from '$lib/wallet/core/feed.svelte';
-import { session } from '$lib/session/core/session.svelte';
-import { onSignCeremony } from '$lib/onboarding/core/passkey';
+} from '#lib/wallet/core/tracker-resident.ts';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { onSignCeremony } from '#lib/onboarding/core/passkey.ts';
 import { approvalProgress, IDLE_APPROVAL, type ApprovalProgress } from '../approval-progress';
 import { createSignRequestSession, type SignRequestSession } from './sign-session';
 import { claimThrough, type ClaimPhase, type SignResponder, type SubmitClaim } from './sign-types';
 import { handoffKey, withdrawKey, createTrackForward, type TrackForward } from './track-forward';
-import { countPanelFailure } from '$lib/services/bug-report';
-import { multisig } from '$lib/multisig/core/store.svelte';
+import { countPanelFailure } from '#lib/services/bug-report.ts';
+import { multisig } from '#lib/multisig/core/store.svelte.ts';
 
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_SIGN_VIEW: SignView = {

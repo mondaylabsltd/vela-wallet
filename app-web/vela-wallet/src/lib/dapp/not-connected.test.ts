@@ -24,7 +24,7 @@
  * `e2e/extension-signing.e2e.ts` walks the same thing in the packaged
  * extension.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DAppGrant } from './grants';
@@ -36,8 +36,8 @@ const MESSAGE = '0x68656c6c6f';
 const stored = new Map<string, DAppGrant>();
 const answers: unknown[] = [];
 
-vi.mock('$lib/core/client', async (real) => ({
-	...(await real<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (real) => ({
+	...(await real<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 vi.mock('./grants', () => ({

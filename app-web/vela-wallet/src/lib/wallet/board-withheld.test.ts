@@ -14,10 +14,10 @@ import {
 	resolveSigningMessages,
 	resolveWalletFlowMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
-import { buildMobileState as buildSettingsMobileState } from '$lib/settings/fixtures';
-import { buildSigningState } from '$lib/signing/fixtures';
+} from '#lib/i18n/engine.server.ts';
+import { buildDesktopFlowState, buildFlowState } from '#lib/flows/fixtures.ts';
+import { buildMobileState as buildSettingsMobileState } from '#lib/settings/fixtures.ts';
+import { buildSigningState } from '#lib/signing/fixtures.ts';
 import { withheldBoard, withheldModel } from './board-withheld';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { MONEY_PENDING } from './live';

@@ -14,10 +14,10 @@
  */
 import { commands } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import { decodeImage } from '$lib/services/qr-decode';
-import { encodeShareQr } from '$lib/wallet/qr';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
+import { decodeImage } from '#lib/services/qr-decode.ts';
+import { encodeShareQr } from '#lib/wallet/qr.ts';
 import {
 	CARD_PALETTE,
 	composeShareSvg,
@@ -211,9 +211,9 @@ describe.skipIf(!REVIEW_DIR)('the share image, written out for review', () => {
 	it.each(cases)('$file', async ({ file, card }) => {
 		let identiconSvg = card.identiconSvg;
 		try {
-			const { loadOnboardingCore } = await import('$lib/onboarding/core/wasm-client');
+			const { loadOnboardingCore } = await import('#lib/onboarding/core/wasm-client.ts');
 			await loadOnboardingCore();
-			const { identiconSvgForClient } = await import('$lib/wallet/identicon');
+			const { identiconSvgForClient } = await import('#lib/wallet/identicon.ts');
 			identiconSvg = identiconSvgForClient(ADDRESS);
 		} catch {
 			// The placeholder disc stands in; the layout is what is under review.

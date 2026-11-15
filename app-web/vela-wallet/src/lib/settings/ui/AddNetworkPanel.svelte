@@ -10,9 +10,9 @@
 	 * take should not be dressed as the action you came for.
 	 */
 	import type { AddNetworkModel } from '../model';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import Callout from './Callout.svelte';
 	import ChainMark from './ChainMark.svelte';
 	import CheckList from './CheckList.svelte';

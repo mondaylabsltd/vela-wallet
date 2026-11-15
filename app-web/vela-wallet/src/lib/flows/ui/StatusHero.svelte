@@ -22,8 +22,8 @@
 	 * nonce. The clock, still, in the waiting colours — no ring (nothing is
 	 * on its way), no breathing, and never the failure's red.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { ReceiptStage } from '../model';
 
 	interface Props {

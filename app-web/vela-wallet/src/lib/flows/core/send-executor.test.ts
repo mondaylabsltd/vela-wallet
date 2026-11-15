@@ -9,11 +9,11 @@
 //     reads per chain (Tempo: the fee recipient instead of the relay's gas
 //     quote), swallowing every error.
 // And `EstimateFee` hands `auto_fee_token` through to the fee session.
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { APIToken } from '$lib/services/tokens-model';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { APIToken } from '#lib/services/tokens-model.ts';
 
 const seams = vi.hoisted(() => ({
 	fetchTokens: vi.fn(),
@@ -36,8 +36,8 @@ const seams = vi.hoisted(() => ({
 
 /** r5reg-3: what the pool says of the chains now. */
 const pool = vi.hoisted(() => ({ rateLimited: new Set<number>(), failed: new Set<number>() }));
-vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+vi.mock('#lib/services/rpc-pool.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/rpc-pool.ts')>()),
 	getRateLimitedChains: () => pool.rateLimited,
 	getFailedRpcChains: () => pool.failed
 }));
@@ -45,13 +45,13 @@ vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
 /** The tracker's subscribers — the send lock's hold listens there (round 3). */
 const trackerListeners = vi.hoisted(() => new Set<() => void>());
 
-vi.mock('$lib/core/kernels', () => ({
+vi.mock('#lib/core/kernels.ts', () => ({
 	fromHex: vi.fn(),
 	verifySafeWebAuthn: vi.fn(),
 	userOpWriteAheadWaitMs: () => 5_000,
 	userOpNotSentDetail: () => 'relay unreachable; nothing was sent'
 }));
-vi.mock('$lib/wallet/core/tracker-resident', () => ({
+vi.mock('#lib/wallet/core/tracker-resident.ts', () => ({
 	trackSubmitted: seams.trackSubmitted,
 	noteSubmitFacts: seams.noteSubmitFacts,
 	subscribeTxTracker: (listener: () => void) => {
@@ -62,15 +62,15 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 	txTrackerView: seams.trackerView,
 	outcomeOf: seams.outcomeOf
 }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('#lib/services/networks.ts', () => ({
 	getAllNetworksSync: () => [],
 	spaceNetworksSync: () => [],
 	networkId: (id: number) => `chain-${id}`,
 	nativeSymbol: () => 'ETH',
 	chainName: (id: number) => `Chain ${id}`
 }));
-vi.mock('$lib/onboarding/core/passkey', () => ({ PasskeyError: class extends Error {} }));
-vi.mock('$lib/signing/sign-challenge', () => ({
+vi.mock('#lib/onboarding/core/passkey.ts', () => ({ PasskeyError: class extends Error {} }));
+vi.mock('#lib/signing/sign-challenge.ts', () => ({
 	cancelChallenge: vi.fn(),
 	signChallenge: vi.fn(),
 	VenueBlockedError: class VenueBlockedError extends Error {
@@ -85,19 +85,19 @@ vi.mock('$lib/signing/sign-challenge', () => ({
 		}
 	}
 }));
-vi.mock('$lib/services/add-network.svelte', () => ({
+vi.mock('#lib/services/add-network.svelte.ts', () => ({
 	addCustomNetworkByChainId: seams.addNetwork
 }));
-vi.mock('$lib/services/bundler-service', () => ({
+vi.mock('#lib/services/bundler-service.ts', () => ({
 	parseBundlerUnderfunded: vi.fn(),
 	probeTreasury: vi.fn(),
 	fetchInBandGasQuotes: seams.inBand,
 	fetchBundlerAccountInfo: seams.accountInfo
 }));
-vi.mock('$lib/services/platform', () => ({ hapticError: vi.fn(), hapticSuccess: vi.fn() }));
-vi.mock('$lib/services/recipient-identity', () => ({ resolveRecipientIdentity: vi.fn() }));
-vi.mock('$lib/services/recipient-risk', () => ({ resolveRecipientRisk: vi.fn() }));
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/platform.ts', () => ({ hapticError: vi.fn(), hapticSuccess: vi.fn() }));
+vi.mock('#lib/services/recipient-identity.ts', () => ({ resolveRecipientIdentity: vi.fn() }));
+vi.mock('#lib/services/recipient-risk.ts', () => ({ resolveRecipientRisk: vi.fn() }));
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	// The submit's own refusal, as `submitUserOp` throws it.
 	UserOpNotSentError: class extends Error {
 		constructor(
@@ -113,21 +113,21 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	fetchRawGasSignals: seams.gasSignals,
 	fetchRawBundlerQuote: seams.bundlerQuote
 }));
-vi.mock('$lib/services/accounts', () => ({
+vi.mock('#lib/services/accounts.ts', () => ({
 	findAccountByAddress: vi.fn(),
 	findAccountByCredentialId: vi.fn()
 }));
-vi.mock('$lib/services/records', () => ({
+vi.mock('#lib/services/records.ts', () => ({
 	saveTransactions: seams.saveTransactions,
 	updateTransactions: seams.updateTransactions,
 	deleteTransactions: seams.deleteTransactions
 }));
-vi.mock('$lib/services/token-metadata', () => ({ resolveTokenMetadata: vi.fn() }));
-vi.mock('$lib/services/sim/tx-simulation', () => ({
+vi.mock('#lib/services/token-metadata.ts', () => ({ resolveTokenMetadata: vi.fn() }));
+vi.mock('#lib/services/sim/tx-simulation.ts', () => ({
 	serializeAssetSim: vi.fn(),
 	simulateAssetChanges: vi.fn()
 }));
-vi.mock('$lib/services/wallet-api', () => ({
+vi.mock('#lib/services/wallet-api.ts', () => ({
 	clearTokenCache: seams.clearTokenCache,
 	fetchTokens: seams.fetchTokens
 }));
@@ -135,9 +135,9 @@ vi.mock('$lib/services/wallet-api', () => ({
 import { createSendExecutor, setSendTrackerSink } from './send-executor';
 import { createSendSession } from './send-session';
 import { sendTokenId, type SendShellPorts } from './send-types';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import { sendBatchCalls, type SignFn, type SubmitResult } from '$lib/services/safe-transaction';
-import { PageSignFailedError, VenueBlockedError } from '$lib/signing/sign-challenge';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import { sendBatchCalls, type SignFn, type SubmitResult } from '#lib/services/safe-transaction.ts';
+import { PageSignFailedError, VenueBlockedError } from '#lib/signing/sign-challenge.ts';
 
 const ACCOUNT = '0x' + 'aa'.repeat(20);
 const HELD: SendToken = {
@@ -595,7 +595,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			posted();
 			throw new Error('unreachable');
 		});
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockRejectedValueOnce(new VenueBlockedError({ type: 'not_on_web' }));
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
@@ -618,7 +618,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			await signFn(new Uint8Array(32), {} as never);
 			throw new Error('unreachable');
 		});
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockRejectedValueOnce(
 			new (PageSignFailedError as unknown as new (page: string) => Error)('mismatch')
 		);
@@ -639,7 +639,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	 * transaction" and Try again waits for it like any held confirm.
 	 */
 	it('a submit held behind the account’s previous op fails as previous_pending', async () => {
-		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
+		const { UserOpNotSentError } = await import('#lib/services/safe-transaction.ts');
 		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
 			new UserOpNotSentError(
 				{ nonce_held: { user_op_hash: '0x' + 'ee'.repeat(32) } },
@@ -674,7 +674,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	 * was sent, and it can never land: told as that, and Try again signs anew.
 	 */
 	it('an operation that expired before it was submitted fails as expired', async () => {
-		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
+		const { UserOpNotSentError } = await import('#lib/services/safe-transaction.ts');
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
 		});
@@ -691,7 +691,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	});
 
 	it('a spent nonce fails as nonce_used', async () => {
-		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
+		const { UserOpNotSentError } = await import('#lib/services/safe-transaction.ts');
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
 		});
@@ -717,7 +717,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 
 	/** send-11: a prompt that ran out of time is told apart from one closed. */
 	it('a passkey prompt that timed out fails as passkey_timed_out; a closed one as cancelled', async () => {
-		const { PasskeyError } = await import('$lib/onboarding/core/passkey');
+		const { PasskeyError } = await import('#lib/onboarding/core/passkey.ts');
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
 		});
@@ -742,7 +742,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	 */
 	it('a wait before the passkey is said, bounded, and the network’s — never the passkey’s', async () => {
 		const { PREPARE_LIMIT_MS } = await import('./prepare-bound');
-		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		const { signChallenge } = await import('#lib/signing/sign-challenge.ts');
 		vi.mocked(signChallenge).mockClear();
 		vi.useFakeTimers();
 		try {
@@ -769,7 +769,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	});
 
 	it('a read that fails before the passkey is the network’s; any other error keeps its reading', async () => {
-		const { PoolFailedError } = await import('$lib/services/rpc-pool');
+		const { PoolFailedError } = await import('#lib/services/rpc-pool.ts');
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
 		});
@@ -1130,7 +1130,7 @@ describe('round 3: reliable sending', () => {
 	});
 
 	it('a history that could not be read reaches the core as unread, never as a first transfer', async () => {
-		const { resolveRecipientRisk } = await import('$lib/services/recipient-risk');
+		const { resolveRecipientRisk } = await import('#lib/services/recipient-risk.ts');
 		vi.mocked(resolveRecipientRisk).mockResolvedValueOnce({
 			isContract: false,
 			firstInteraction: null,
@@ -1155,7 +1155,7 @@ describe('round 3: reliable sending', () => {
 	});
 
 	it('tells the core the person’s own name for it, and that it is theirs (r4a-18)', async () => {
-		const { resolveRecipientRisk } = await import('$lib/services/recipient-risk');
+		const { resolveRecipientRisk } = await import('#lib/services/recipient-risk.ts');
 		vi.mocked(resolveRecipientRisk).mockResolvedValueOnce({
 			isContract: true,
 			firstInteraction: true,
@@ -1192,7 +1192,7 @@ describe('a known recipient is named as the person knows them (vis-24)', () => {
 	});
 
 	it('their own name first — an account or a contact — told as theirs, with no lookup', async () => {
-		const { resolveRecipientIdentity } = await import('$lib/services/recipient-identity');
+		const { resolveRecipientIdentity } = await import('#lib/services/recipient-identity.ts');
 		vi.mocked(resolveRecipientIdentity).mockReset();
 		const executor = createSendExecutor(
 			ports({ knownName: (address) => (address === ACCOUNT ? 'Savings' : null) })
@@ -1205,7 +1205,7 @@ describe('a known recipient is named as the person knows them (vis-24)', () => {
 	});
 
 	it('anyone else is looked up as before', async () => {
-		const { resolveRecipientIdentity } = await import('$lib/services/recipient-identity');
+		const { resolveRecipientIdentity } = await import('#lib/services/recipient-identity.ts');
 		vi.mocked(resolveRecipientIdentity).mockResolvedValueOnce({
 			name: 'bob.eth',
 			source: 'ENS'

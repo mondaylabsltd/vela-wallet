@@ -4,7 +4,7 @@
  * is in effect, so the person's card keeps no refused draft.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NetEvent } from '$lib/core/generated/NetEvent';
+import type { NetEvent } from '#lib/core/generated/NetEvent.ts';
 
 const ledger = {
 	events: [] as NetEvent[],
@@ -15,7 +15,7 @@ const ledger = {
 	mismatch: false
 };
 
-vi.mock('$lib/settings/core/network-admin.svelte', () => ({
+vi.mock('#lib/settings/core/network-admin.svelte.ts', () => ({
 	networkAdmin: {
 		boot: async () => {},
 		dispatch: (event: NetEvent) => {

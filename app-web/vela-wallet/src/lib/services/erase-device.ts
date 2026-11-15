@@ -49,7 +49,7 @@
  * empty of ours, it was still there — an empty `vela` database, and whatever
  * not-ours keys sat in it. Erasing means everything.
  */
-import { loadCore, storageIsErasableKey } from '$lib/core/client';
+import { loadCore, storageIsErasableKey } from '#lib/core/client.ts';
 import {
 	DatabaseHeldError,
 	deleteDatabase,

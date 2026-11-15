@@ -9,10 +9,10 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 // The global base: every box is border-box, so a ring sits inside its size.
 import '../../../app.css';
-import { hasFailed, resetLogoCacheForTests } from '$lib/services/logo-cache';
+import { hasFailed, resetLogoCacheForTests } from '#lib/services/logo-cache.ts';
 import TokenIcon from './TokenIcon.svelte';
 
 /** A 1×1 PNG — a logo that loads. */

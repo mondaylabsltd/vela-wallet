@@ -5,7 +5,7 @@
 	 * Drawn in the sheet or dialog the page raises over the send; its title is
 	 * the stop's own.
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import type { SendLockModel } from '../live-send-lock';
 
 	interface Props {

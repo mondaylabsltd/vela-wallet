@@ -126,7 +126,7 @@ export function storedLastPlayedMs(storedValue: string | null): number | null {
 /**
  * `vela_core::launch::launch_animation_due`, the rule every shell asks the
  * core. The web cannot ask it here: the decision is made before first paint
- * (`app.html`) and on Welcome, which never loads the core (`$lib/core/client`).
+ * (`app.html`) and on Welcome, which never loads the core (`#lib/core/client.ts`).
  * So this, like the inline copy, is held to the core's own vectors by
  * `constants.test.ts`, case for case.
  */

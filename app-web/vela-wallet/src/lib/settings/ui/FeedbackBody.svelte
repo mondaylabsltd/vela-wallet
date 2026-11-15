@@ -59,11 +59,11 @@
 	import { fade, scale } from 'svelte/transition';
 	import type { FeedbackModel, FeedbackResult } from '../model';
 	import { ReportDraft } from '../report-draft.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { fill } from '$lib/wallet/messages';
-	import { imageFilesOf, SCREENSHOT_ACCEPT } from '$lib/services/screenshot-prep';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { fill } from '#lib/wallet/messages.ts';
+	import { imageFilesOf, SCREENSHOT_ACCEPT } from '#lib/services/screenshot-prep.ts';
 	import ScreenshotViewer, { type ViewerImage } from './ScreenshotViewer.svelte';
 	import { tapGuard } from './tap-guard';
 

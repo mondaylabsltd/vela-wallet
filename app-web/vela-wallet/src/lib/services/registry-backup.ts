@@ -16,7 +16,7 @@
  * the block opens on it while the walk runs instead of on "Checking…" and
  * then jumping when the answer is no row at all (perf-8).
  */
-import { loadCore, registryBackupStep } from '$lib/core/client';
+import { loadCore, registryBackupStep } from '#lib/core/client.ts';
 import { runWalk } from './core-walk';
 import { storageSealed } from './storage';
 

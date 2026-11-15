@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { listOf } from '$lib/i18n/list';
+	import { listOf } from '#lib/i18n/list.ts';
 	/**
 	 * Inviting the other members (r4D-16): a code to scan and a link to send
 	 * — Share where the browser has it — that adds the multisig in Vela with
@@ -7,14 +7,14 @@
 	 * it is never asked to guess a network. The address is all a member
 	 * strictly needs; the link only saves typing it and guessing the rest.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName } from '$lib/services/networks';
-	import { encodeQr } from '$lib/wallet/qr';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import Button from '#lib/ui/Button.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { chainName } from '#lib/services/networks.ts';
+	import { encodeQr } from '#lib/wallet/qr.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import type { MultisigMessages } from '../messages';
 	import { multisigName } from '../core/display';
 	import { inviteLink } from '../core/invite';

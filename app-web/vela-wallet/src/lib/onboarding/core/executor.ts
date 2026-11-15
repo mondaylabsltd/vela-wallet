@@ -16,11 +16,11 @@ import * as Passkey from './passkey';
 import { PasskeyError } from './passkey';
 import * as Registry from './registry';
 import { RegistryError } from './registry';
-import { isProductionWriteRefused } from '$lib/services/production-guard';
+import { isProductionWriteRefused } from '#lib/services/production-guard.ts';
 import * as Storage from './storage';
 import { StorageError } from './storage';
 import { publish } from './publish';
-import { trustedSignerRegistryRpId } from '$lib/core/kernels';
+import { trustedSignerRegistryRpId } from '#lib/core/kernels.ts';
 import { ceremonyOnPage, pageOf } from './page-ceremony';
 import { groupPublicKeyFromSeed, toHex } from './wasm-client';
 

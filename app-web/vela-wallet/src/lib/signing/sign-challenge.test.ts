@@ -21,20 +21,20 @@
  * its check is never opened. The browser (fetch, the window, its messages) is
  * stood in for; the core, and the page bytes it checks, are real.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hashTypedData, keccak256, trustedSignerFromBytes } from '$lib/core/kernels';
-import { computeSafeMessageHash } from '$lib/services/safe-transaction';
-import { AskerGoneError } from '$lib/signing/core/sign-types';
+import { hashTypedData, keccak256, trustedSignerFromBytes } from '#lib/core/kernels.ts';
+import { computeSafeMessageHash } from '#lib/services/safe-transaction.ts';
+import { AskerGoneError } from '#lib/signing/core/sign-types.ts';
 import { CHECK_MS, pageHandoff, type PageHandoffDeps } from './page-handoff.svelte';
-import { multisigGenesis, safeTxHash } from '$lib/multisig/core/kernel';
-import { bytesToHex } from '$lib/onboarding/core/passkey';
-import { saveAccount } from '$lib/onboarding/core/storage';
-import type { Account } from '$lib/onboarding/generated/Account';
-import { HARNESS_PAGE_KEY } from '$lib/dev/harness-page';
+import { multisigGenesis, safeTxHash } from '#lib/multisig/core/kernel.ts';
+import { bytesToHex } from '#lib/onboarding/core/passkey.ts';
+import { saveAccount } from '#lib/onboarding/core/storage.ts';
+import type { Account } from '#lib/onboarding/generated/Account.ts';
+import { HARNESS_PAGE_KEY } from '#lib/dev/harness-page.ts';
 import { safariManifest } from '../../../extension/lib/safari-manifest.js';
 import {
 	PageDeclinedError,
@@ -595,7 +595,7 @@ function signature(
 
 /** The bytes a transaction kind signs: the SafeOp hash of the request's operation, from the core. */
 async function safeOpOf(op: Record<string, string>): Promise<Uint8Array> {
-	const { calculateSafeOpHash } = await import('$lib/services/safe-transaction');
+	const { calculateSafeOpHash } = await import('#lib/services/safe-transaction.ts');
 	const bytes = (h: string) =>
 		h === '0x' ? new Uint8Array() : new Uint8Array(Buffer.from(h.slice(2), 'hex'));
 	return calculateSafeOpHash(

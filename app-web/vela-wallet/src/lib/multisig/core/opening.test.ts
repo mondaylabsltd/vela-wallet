@@ -8,11 +8,11 @@
  *   door's `review.opening`, the words each key says, and the error a
  *   proposal that was not built becomes (`ActionState.unread`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/services/networks', async (actual) => ({
-	...(await actual<typeof import('$lib/services/networks')>()),
+vi.mock('#lib/services/networks.ts', async (actual) => ({
+	...(await actual<typeof import('#lib/services/networks.ts')>()),
 	getAllNetworksSync: () => [
 		{ chainId: 1, isTestnet: false },
 		{ chainId: 8453, isTestnet: false },

@@ -23,10 +23,10 @@
 	 * centred card above it.
 	 */
 	import { MediaQuery } from 'svelte/reactivity';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
-	import type { WalletMessages } from '$lib/wallet/messages';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
+	import type { WalletMessages } from '#lib/wallet/messages.ts';
 
 	interface Props {
 		copy: WalletMessages['signOut'];

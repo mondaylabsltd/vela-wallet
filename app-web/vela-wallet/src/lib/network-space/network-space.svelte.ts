@@ -6,14 +6,14 @@
  * testnets and developer networks with nothing of real value. Every list a
  * person sees — balances and the total, assets, activity, receive, send's
  * networks, the chains a dApp can use — reads `spaceNetworksSync()`
- * (`$lib/services/networks`), never the whole list.
+ * (`#lib/services/networks.ts`), never the whole list.
  *
  * Which space a stored value names is the core's to say (`networkSpaceRead`);
  * before the core has loaded, the one value it accepts besides the default is
  * read directly, so the first frame already shows the right space.
  */
-import { browser } from '$app/environment';
-import { networkSpaceRead, whenCoreLoaded } from '$lib/core/client';
+import { browser } from '$app/env';
+import { networkSpaceRead, whenCoreLoaded } from '#lib/core/client.ts';
 import type { NetworkSpaceMessages } from './messages';
 
 export type NetworkSpace = 'mainnet' | 'testnet';

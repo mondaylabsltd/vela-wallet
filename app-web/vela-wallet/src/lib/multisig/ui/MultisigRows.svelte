@@ -8,14 +8,14 @@
 	 * styled as its rows are.
 	 */
 	import { onMount } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import { presence, waitingWords } from '../core/presence.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import SkeletonRow from '#lib/wallet/ui/SkeletonRow.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import type { MultisigMessages } from '../messages';
 	import { multisigName, shortenAddress } from '../core/display';
 	import { localOwners } from '../core/owners';

@@ -17,20 +17,20 @@
  * move a completely different number.
  */
 
-import { chainName } from '$lib/services/networks';
-import { tokenChainId, tokenId, type APIToken } from '$lib/services/tokens-model';
-import { tokenLogoURLs } from '$lib/flows/marks';
+import { chainName } from '#lib/services/networks.ts';
+import { tokenChainId, tokenId, type APIToken } from '#lib/services/tokens-model.ts';
+import { tokenLogoURLs } from '#lib/flows/marks.ts';
 
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
-import type { SendFeeOutcome } from '$lib/core/generated/SendFeeOutcome';
-import type { SendOperation } from '$lib/core/generated/SendOperation';
-import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { SessionOptions } from '$lib/core/types';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { SendAlertKind } from '#lib/core/generated/SendAlertKind.ts';
+import type { SendFeeOutcome } from '#lib/core/generated/SendFeeOutcome.ts';
+import type { SendOperation } from '#lib/core/generated/SendOperation.ts';
+import type { SendReceiptOutcome } from '#lib/core/generated/SendReceiptOutcome.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 import type { SendHoldingsAnswer } from './send-holdings';
 
 /** One request from the core, carrying the id it will be answered by. */
@@ -254,4 +254,4 @@ export function indexTokens(tokens: APIToken[]): Map<string, APIToken> {
 // The fund-safety codec lives on its own, with its own vectors (spec 026 D25):
 // the core states base units as DECIMAL strings and every `safe-transaction.ts`
 // consumer reads HEX. Re-exported here so the ported call sites are unchanged.
-export { decimalToHex, fromWireAmount, toShellCall } from '$lib/services/amount-codec';
+export { decimalToHex, fromWireAmount, toShellCall } from '#lib/services/amount-codec.ts';

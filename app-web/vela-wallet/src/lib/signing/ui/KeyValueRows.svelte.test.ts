@@ -4,7 +4,7 @@
  * (r15-10), a full address may break only between its two halves (22 + 20),
  * never inside one: at every width each half is one line.
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import KeyValueRows from './KeyValueRows.svelte';

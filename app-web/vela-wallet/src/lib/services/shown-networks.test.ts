@@ -4,17 +4,17 @@
  * from what this browser holds — and a network holding the person's money
  * as far as it knows is never the one taken away.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 
-import { setItem } from '$lib/services/storage';
+import { setItem } from '#lib/services/storage.ts';
 import { CHAINS } from './chains';
 import {
 	ensureShownNetworks,

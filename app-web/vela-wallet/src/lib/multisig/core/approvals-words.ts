@@ -3,8 +3,8 @@
  * approval", never "Require 1 approvals" (`pluralForm`: the core's CLDR rule,
  * Russian's `_few` included).
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import { pluralForm } from '$lib/i18n/plural';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import { pluralForm } from '#lib/i18n/plural.ts';
 import type { MultisigMessages } from '../messages';
 
 function count(threshold: string | number | bigint): number {

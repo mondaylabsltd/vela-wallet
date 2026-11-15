@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import { instantiateQr, readQr, type QrDecoder } from '$lib/services/qr-wasm';
+import { instantiateQr, readQr, type QrDecoder } from '#lib/services/qr-wasm.ts';
 import { buildQrPath, encodeQr } from './qr';
 
 let decoder: QrDecoder;

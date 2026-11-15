@@ -7,10 +7,10 @@
  * (`openSend`, the session's `dispatch`, `closeSend`), and what they show.
  * Nothing about sending is decided here.
  */
-import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendOpenParams } from '$lib/core/generated/SendOpenParams';
-import type { SendView } from '$lib/core/generated/SendView';
+import type { SendAlertKind } from '#lib/core/generated/SendAlertKind.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendOpenParams } from '#lib/core/generated/SendOpenParams.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
 
 export type SendDeskPort = {
 	/** The send open now, or `null`. */

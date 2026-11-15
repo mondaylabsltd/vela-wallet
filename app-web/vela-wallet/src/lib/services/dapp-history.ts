@@ -12,8 +12,8 @@
  * summary, its cut of the request and its `result` (empty for a signature) —
  * stored here verbatim. This file only projects the record's own fields.
  */
-import type { DappSummary } from '$lib/core/generated/DappSummary';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
+import type { DappSummary } from '#lib/core/generated/DappSummary.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
 import { nativeSymbol } from './networks';
 import { MAX_SIGNED_CONTENT, type LocalTransaction } from './transactions-model';
 import type { StoredAssetSim } from './sim/tx-simulation';

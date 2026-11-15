@@ -8,9 +8,9 @@
 	 * characters of an address you have used before; the artwork is the part
 	 * that does not match, and it only helps if it is where the eye already is.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 
 	interface Props {
 		label: string;

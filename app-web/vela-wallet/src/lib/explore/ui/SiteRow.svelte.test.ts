@@ -11,7 +11,7 @@
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import type { SiteModel } from '../model';
 import SiteRow from './SiteRow.svelte';
 

@@ -17,13 +17,13 @@
  * the executor's answers — and, at the end, all of it under the real core.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import type { FeedEffect } from './feed-types';
-import type { FeedView } from '$lib/core/generated/FeedView';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
 
 const kv = new Map<string, string>();
 const storage = vi.hoisted(() => ({ refuse: false, writes: 0 }));
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => {
 		if (storage.refuse) throw new Error('quota');
@@ -32,11 +32,11 @@ vi.mock('$lib/services/storage', () => ({
 	}),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
-vi.mock('$lib/services/activity', async (importOriginal) => {
-	const original = await importOriginal<typeof import('$lib/services/activity')>();
+vi.mock('#lib/services/activity.ts', async (importOriginal) => {
+	const original = await importOriginal<typeof import('#lib/services/activity.ts')>();
 	return { ...original, syncReceivedTransfers: vi.fn(async () => 0) };
 });
-vi.mock('$lib/services/recipient-identity', () => ({
+vi.mock('#lib/services/recipient-identity.ts', () => ({
 	resolveRecipientIdentity: async () => null
 }));
 
@@ -45,15 +45,15 @@ const pool = vi.hoisted(() => ({
 	calls: [] as { method: string; params: unknown[]; chainId: number }[],
 	answer: (() => ({})) as (method: string, params: unknown[], chainId: number) => unknown
 }));
-vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+vi.mock('#lib/services/rpc-pool.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/rpc-pool.ts')>()),
 	poolRpcCall: async (method: string, params: unknown[], chainId: number) => {
 		pool.calls.push({ method, params, chainId });
 		return pool.answer(method, params, chainId);
 	}
 }));
 
-import { dayStartMs } from '$lib/services/activity';
+import { dayStartMs } from '#lib/services/activity.ts';
 import { createFeedExecutor, readReceiveTime, toFeedRecord } from './feed-executor';
 
 const TX_KEY = 'vela.transactionHistory';
@@ -401,7 +401,7 @@ describe('read_receive_time asks the chain, through the pool, and never the cloc
  */
 describe('through the core: receipts stamped "today" end under their own day (PR 3)', () => {
 	it('three stored receipts are re-timed in the store and re-dated in the feed; nothing else is touched', async () => {
-		await import('$lib/i18n/wasm-init.server');
+		await import('#lib/i18n/wasm-init.server.ts');
 		const { createActivityFeedSession } = await import('./feed-session');
 		const receipts = [receive('0xaaa'), receive('0xbbb'), receive('0xccc')];
 		// Already marked: its time is not asked about again.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { accountName } from '$lib/multisig/core/account-name';
+	import { accountName } from '#lib/multisig/core/account-name.ts';
 	/**
 	 * The wallet a signed-in person lands in — the web's answer to the iOS root
 	 * view and the desktop's `SessionRoute::Wallet` branch (spec 019).
@@ -21,32 +21,32 @@
 	 *    screen, so the tab itself was the sign-out — which meant tapping
 	 *    设置 to change your language logged you out instead.
 	 */
-	import { markHistory } from '$lib/ui/history';
-	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
-	import { intents } from '$lib/intents/index.svelte';
-	import { transfers } from '$lib/intents/transfers.svelte';
-	import { sendDesk } from '$lib/flows/send-desk.svelte';
-	import { screenDesk } from '$lib/flows/screen-desk.svelte';
-	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
+	import { markHistory, replaceUrl } from '#lib/ui/history.ts';
+	import CoreWaiting from '#lib/ui/CoreWaiting.svelte';
+	import { intents } from '#lib/intents/index.svelte.ts';
+	import { transfers } from '#lib/intents/transfers.svelte.ts';
+	import { sendDesk } from '#lib/flows/send-desk.svelte.ts';
+	import { screenDesk } from '#lib/flows/screen-desk.svelte.ts';
+	import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { STAY_QUERY } from '$lib/intro/gate';
+	import { STAY_QUERY } from '#lib/intro/gate.ts';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
-	import WalletDesktop from '$lib/wallet/WalletDesktop.svelte';
-	import WalletHome from '$lib/wallet/WalletHome.svelte';
-	import SignOutHost from '$lib/session/ui/SignOutHost.svelte';
-	import AccountSwitcher from '$lib/session/ui/AccountSwitcher.svelte';
-	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import ChainFilterList from '$lib/wallet/ui/ChainFilterList.svelte';
-	import Dialog from '$lib/settings/ui/Dialog.svelte';
-	import RpcFixBody from '$lib/settings/ui/RpcFixBody.svelte';
-	import BalanceDetailBody from '$lib/settings/ui/BalanceDetailBody.svelte';
-	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
-	import RelayerBody from '$lib/settings/ui/RelayerBody.svelte';
-	import RelayUnreachableBody from '$lib/settings/ui/RelayUnreachableBody.svelte';
-	import FeedbackBody from '$lib/settings/ui/FeedbackBody.svelte';
+	import WalletDesktop from '#lib/wallet/WalletDesktop.svelte';
+	import WalletHome from '#lib/wallet/WalletHome.svelte';
+	import SignOutHost from '#lib/session/ui/SignOutHost.svelte';
+	import AccountSwitcher from '#lib/session/ui/AccountSwitcher.svelte';
+	import IdenticonViewerHost from '#lib/wallet/ui/IdenticonViewerHost.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import ChainFilterList from '#lib/wallet/ui/ChainFilterList.svelte';
+	import Dialog from '#lib/settings/ui/Dialog.svelte';
+	import RpcFixBody from '#lib/settings/ui/RpcFixBody.svelte';
+	import BalanceDetailBody from '#lib/settings/ui/BalanceDetailBody.svelte';
+	import UnreachableBody from '#lib/settings/ui/UnreachableBody.svelte';
+	import RelayerBody from '#lib/settings/ui/RelayerBody.svelte';
+	import RelayUnreachableBody from '#lib/settings/ui/RelayUnreachableBody.svelte';
+	import FeedbackBody from '#lib/settings/ui/FeedbackBody.svelte';
 	import {
 		feedbackLabels,
 		liveBalanceDetail,
@@ -55,43 +55,47 @@
 		liveRelayUnreachable,
 		liveRpcFix,
 		liveUnreachable
-	} from '$lib/settings/live';
-	import { relayReportSend } from '$lib/settings/report-send.svelte';
-	import { deviceFacts } from '$lib/settings/device-facts';
-	import { fileReport } from '$lib/settings/file-report';
-	import { buildBugReport, readWorkerFailureLines } from '$lib/services/bug-report';
-	import type { SendRelayReport } from '$lib/core/generated/SendRelayReport';
-	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
-	import { session } from '$lib/session/core/session.svelte';
-	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-	import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
-	import type { ContactsView } from '$lib/core/generated/ContactsView';
-	import { readFlowHandoff } from '$lib/flows/contact-handoff';
-	import { validatePayQuery } from '$lib/flows/core/payment-request';
-	import { payPrefill } from '$lib/pay/link';
-	import { takeKeptPay } from '$lib/pay/kept';
-	import { preferences } from '$lib/services/preferences.svelte';
-	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { showsFiat } from '$lib/network-space/fiat';
-	import { chainName, subscribeNetworks } from '$lib/services/networks';
-	import { ownNodes } from '$lib/services/own-node.svelte';
-	import { reportToast } from '$lib/settings/report-toast.svelte';
-	import { fill } from '$lib/wallet/messages';
+	} from '#lib/settings/live.ts';
+	import { relayReportSend } from '#lib/settings/report-send.svelte.ts';
+	import { deviceFacts } from '#lib/settings/device-facts.ts';
+	import { fileReport } from '#lib/settings/file-report.ts';
+	import { buildBugReport, readWorkerFailureLines } from '#lib/services/bug-report.ts';
+	import type { SendRelayReport } from '#lib/core/generated/SendRelayReport.ts';
+	import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+	import type { ContactGroupView } from '#lib/core/generated/ContactGroupView.ts';
+	import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+	import { readFlowHandoff } from '#lib/flows/contact-handoff.ts';
+	import { validatePayQuery } from '#lib/flows/core/payment-request.ts';
+	import { payPrefill } from '#lib/pay/link.ts';
+	import { takeKeptPay } from '#lib/pay/kept.ts';
+	import { preferences } from '#lib/services/preferences.svelte.ts';
+	import {
+		accountLivesOn,
+		publishExtChains,
+		setExtAccountChains
+	} from '#lib/dapp/core/ext-chains.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import { showsFiat } from '#lib/network-space/fiat.ts';
+	import { chainName, subscribeNetworks } from '#lib/services/networks.ts';
+	import { ownNodes } from '#lib/services/own-node.svelte.ts';
+	import { reportToast } from '#lib/settings/report-toast.svelte.ts';
+	import { fill } from '#lib/wallet/messages.ts';
 	import {
 		nodeFallbackToNotice,
 		nodeNoticeTopic,
 		readNoticed,
 		staleNodeNotice,
 		writeNoticed
-	} from '$lib/wallet/node-notice';
-	import { inExtension } from '$lib/dapp/transport';
-	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
-	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
-	import { oneSurface } from '$lib/extension/one-surface.svelte';
-	import { amountFromInput } from '$lib/services/locale-format';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	} from '#lib/wallet/node-notice.ts';
+	import { inExtension } from '#lib/dapp/transport.ts';
+	import { isPanelDocument } from '#lib/dapp/panel-surface.svelte.ts';
+	import DappRequestHost from '#lib/dapp/DappRequestHost.svelte';
+	import { oneSurface } from '#lib/extension/one-surface.svelte.ts';
+	import { amountFromInput } from '#lib/services/locale-format.ts';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import {
 		desktopWithIdentity,
 		desktopWithSync,
@@ -99,53 +103,53 @@
 		homeWithSync,
 		syncLine,
 		type WalletIdentity
-	} from '$lib/wallet/identity';
-	import { shownIdentity } from '$lib/multisig/core/shown';
-	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
-	import { multisig } from '$lib/multisig/core/store.svelte';
-	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
-	import MultisigHomeCard from '$lib/multisig/ui/MultisigHomeCard.svelte';
-	import { keepLink } from '$lib/multisig/core/kept-link';
+	} from '#lib/wallet/identity.ts';
+	import { shownIdentity } from '#lib/multisig/core/shown.ts';
+	import { receiveIdentity } from '#lib/onboarding/core/receive-identity.svelte.ts';
+	import { multisig } from '#lib/multisig/core/store.svelte.ts';
+	import { multisigUi } from '#lib/multisig/core/ui.svelte.ts';
+	import MultisigHost from '#lib/multisig/ui/MultisigHost.svelte';
+	import MultisigHomeCard from '#lib/multisig/ui/MultisigHomeCard.svelte';
+	import { keepLink } from '#lib/multisig/core/kept-link.ts';
 	import {
 		MULTISIG_NON_MEMBERS,
 		MULTISIG_RETRY,
 		missingOfRow,
 		proposalOfRow,
 		waitingRows
-	} from '$lib/multisig/core/activity.svelte';
+	} from '#lib/multisig/core/activity.svelte.ts';
 	import {
 		membersAnywhere,
 		proposals as multisigProposals
-	} from '$lib/multisig/core/proposals.svelte';
-	import { livesElsewhere } from '$lib/multisig/core/elsewhere';
-	import { multisigKnownName, ownOrMember } from '$lib/multisig/core/known';
-	import { readMembers } from '$lib/multisig/core/chain';
-	import { localOwners } from '$lib/multisig/core/owners';
-	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
-	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
-	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
-	import { FlowNav, sendBackStep, type FlowEntry } from '$lib/flows/nav.svelte';
-	import type { FlowStateId } from '$lib/flows/model';
-	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { feed } from '$lib/wallet/core/feed.svelte';
-	import { followIncomingCadence } from '$lib/wallet/core/incoming-cadence';
-	import { REFRESH_AGE_TICK_MS, RefreshHold } from '$lib/wallet/refresh-hold.svelte';
+	} from '#lib/multisig/core/proposals.svelte.ts';
+	import { livesElsewhere } from '#lib/multisig/core/elsewhere.ts';
+	import { multisigKnownName, ownOrMember } from '#lib/multisig/core/known.ts';
+	import { readMembers } from '#lib/multisig/core/chain.ts';
+	import { localOwners } from '#lib/multisig/core/owners.ts';
+	import FlowsMobile from '#lib/flows/FlowsMobile.svelte';
+	import FlowsPanel from '#lib/flows/FlowsPanel.svelte';
+	import ScanSurface from '#lib/flows/ui/ScanSurface.svelte';
+	import { FlowNav, sendBackStep, type FlowEntry } from '#lib/flows/nav.svelte.ts';
+	import type { FlowStateId } from '#lib/flows/model.ts';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
+	import { feed } from '#lib/wallet/core/feed.svelte.ts';
+	import { followIncomingCadence } from '#lib/wallet/core/incoming-cadence.ts';
+	import { REFRESH_AGE_TICK_MS, RefreshHold } from '#lib/wallet/refresh-hold.svelte.ts';
 	import {
 		createReceiveWatchSession,
 		type ReceiveWatchSession
-	} from '$lib/flows/core/receive-watch';
+	} from '#lib/flows/core/receive-watch.ts';
 	import {
 		createPaymentRequestSession,
 		type PaymentRequestSession
-	} from '$lib/flows/core/payment-request';
-	import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
-	import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
-	import { loadCore } from '$lib/core/client';
-	import { currency } from '$lib/settings/core/currency.svelte';
-	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { activitySaysHistory, withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
-	import type { ActivityGroupModel } from '$lib/wallet/model';
+	} from '#lib/flows/core/payment-request.ts';
+	import type { PaymentRequestView } from '#lib/core/generated/PaymentRequestView.ts';
+	import type { ReceiveWatchView } from '#lib/core/generated/ReceiveWatchView.ts';
+	import { loadCore } from '#lib/core/client.ts';
+	import { currency } from '#lib/settings/core/currency.svelte.ts';
+	import { feeTierPreference } from '#lib/settings/core/fee-tier.svelte.ts';
+	import { activitySaysHistory, withLiveWallet, withLiveWalletDesktop } from '#lib/wallet/live.ts';
+	import type { ActivityGroupModel } from '#lib/wallet/model.ts';
 	import {
 		addTokenChoice,
 		receiveAssetPicked,
@@ -153,23 +157,30 @@
 		visibleBalanceTokens,
 		withLiveDesktopFlow,
 		withLiveFlow
-	} from '$lib/flows/live';
-	import { createSendSession, type SendSession } from '$lib/flows/core/send-session';
-	import { toSendToken } from '$lib/flows/core/send-types';
-	import { chosenCurrencyCode, sendDisplayContext } from '$lib/flows/core/send-display';
-	import { liveSendLock } from '$lib/flows/live-send-lock';
-	import { watchChainRecovery } from '$lib/flows/core/chain-recovery';
-	import SendLock from '$lib/flows/ui/SendLock.svelte';
-	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
-	import { toApiToken } from '$lib/wallet/core/balance-executor';
-	import type { SendToken } from '$lib/core/generated/SendToken';
-	import { createBatchImportSession, type BatchImportSession } from '$lib/flows/core/batch-session';
+	} from '#lib/flows/live.ts';
+	import { createSendSession, type SendSession } from '#lib/flows/core/send-session.ts';
+	import { toSendToken } from '#lib/flows/core/send-types.ts';
+	import { chosenCurrencyCode, sendDisplayContext } from '#lib/flows/core/send-display.ts';
+	import { liveSendLock } from '#lib/flows/live-send-lock.ts';
+	import { watchChainRecovery } from '#lib/flows/core/chain-recovery.ts';
+	import SendLock from '#lib/flows/ui/SendLock.svelte';
+	import {
+		answerHoldings,
+		readHoldings,
+		type HoldingsSource
+	} from '#lib/flows/core/send-holdings.ts';
+	import { toApiToken } from '#lib/wallet/core/balance-executor.ts';
+	import type { SendToken } from '#lib/core/generated/SendToken.ts';
+	import {
+		createBatchImportSession,
+		type BatchImportSession
+	} from '#lib/flows/core/batch-session.ts';
 	import {
 		createManageTokensSession,
 		type ManageTokensSession
-	} from '$lib/wallet/core/manage-tokens-session';
-	import type { MtokView } from '$lib/core/generated/MtokView';
-	import { spaceNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
+	} from '#lib/wallet/core/manage-tokens-session.ts';
+	import type { MtokView } from '#lib/core/generated/MtokView.ts';
+	import { spaceNetworksSync, getCustomChainIdsSync, networkId } from '#lib/services/networks.ts';
 	import {
 		formChainOf,
 		makeRecipientId,
@@ -177,33 +188,43 @@
 		sendTokenId,
 		visibleSendTokens,
 		type SendClassFilter
-	} from '$lib/flows/live-send';
-	import { prefetchForSend } from '$lib/services/safe-transaction';
-	import type { BatchView } from '$lib/core/generated/BatchView';
-	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
-	import type { FeeView } from '$lib/core/generated/FeeView';
-	import type { FeeTier } from '$lib/core/generated/FeeTier';
-	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { dropsToldFee, feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
-	import { scanner, scanNotice, scanRecovery } from '$lib/flows/core/scanner.svelte';
-	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
-	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
+	} from '#lib/flows/live-send.ts';
+	import { prefetchForSend } from '#lib/services/safe-transaction.ts';
+	import type { BatchView } from '#lib/core/generated/BatchView.ts';
+	import { FeeQuote } from '#lib/flows/core/fee-quote.svelte.ts';
+	import type { FeeView } from '#lib/core/generated/FeeView.ts';
+	import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+	import { SpeedControl } from '#lib/flows/core/speed-control.svelte.ts';
+	import {
+		dropsToldFee,
+		feeKey,
+		FeeStateWord,
+		FeeTokenWord
+	} from '#lib/flows/core/send-estimates.ts';
+	import { scanner, scanNotice, scanRecovery } from '#lib/flows/core/scanner.svelte.ts';
+	import { isHexAddress, parseEIP681, payLinkBase } from '#lib/services/eip681.ts';
+	import { setSendTrackerSink } from '#lib/flows/core/send-executor.ts';
 	import {
 		startTxTracker,
 		subscribeInFlightOps,
 		trackSubmitted
-	} from '$lib/wallet/core/tracker-resident';
-	import { track } from '$lib/analytics';
-	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
-	import SigningHost from '$lib/signing/SigningHost.svelte';
-	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
-	import type { SendOpenParams } from '$lib/core/generated/SendOpenParams';
-	import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
-	import type { SendView } from '$lib/core/generated/SendView';
+	} from '#lib/wallet/core/tracker-resident.ts';
+	import { track } from '#lib/analytics/index.ts';
+	import AppPrompt from '#lib/app-prompt/AppPrompt.svelte';
+	import SigningHost from '#lib/signing/SigningHost.svelte';
+	import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
+	import type { SendOpenParams } from '#lib/core/generated/SendOpenParams.ts';
+	import type { SendAlertKind } from '#lib/core/generated/SendAlertKind.ts';
+	import type { SendView } from '#lib/core/generated/SendView.ts';
 
-	import { WEB_DESTINATIONS, webNavItems } from '$lib/wallet/destinations';
-	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
-	import { balanceTokenId, liveChainRows, narrowedFeed, sendScopedOutage } from '$lib/wallet/live';
+	import { WEB_DESTINATIONS, webNavItems } from '#lib/wallet/destinations.ts';
+	import { chainFilter } from '#lib/wallet/chain-filter.svelte.ts';
+	import {
+		balanceTokenId,
+		liveChainRows,
+		narrowedFeed,
+		sendScopedOutage
+	} from '#lib/wallet/live.ts';
 	import {
 		feedItemAt,
 		findFeedItem,
@@ -213,8 +234,8 @@
 		storedRequestJson,
 		withLiveTxDetailDesktop,
 		withLiveTxDetailMobile
-	} from '$lib/wallet/live-detail';
-	import { activityFeedTx } from '$lib/wallet/core/feed-resident';
+	} from '#lib/wallet/live-detail.ts';
+	import { activityFeedTx } from '#lib/wallet/core/feed-resident.ts';
 	import type { PageProps } from './$types';
 
 	/** The sidebar's copy of the rule in `destinations.ts`: three rows, not four. */
@@ -1763,7 +1784,7 @@
 	// connected site following the active account, and old grants getting the
 	// core's spelling — all from the ROOT LAYOUT (082 G58, 086 issue 315), so a
 	// switch made on any screen reaches the worker and the site
-	// (`$lib/dapp/follow`).
+	// (`#lib/dapp/follow.ts`).
 
 	/**
 	 * Spec 082 G62: the network filter reaches the feed's CORE, which narrows
@@ -2260,7 +2281,7 @@
 		// r4b-9: a multisig link opened here before there is an account is kept
 		// through Welcome and opened once the wallet is.
 		keepLink(location.hash);
-		void goto(welcome, { replaceState: true });
+		void goto(welcome, { replace: true });
 	});
 
 	/**
@@ -2292,7 +2313,9 @@
 		const handoff = readFlowHandoff(location.search);
 		handedOff = true;
 		if (handoff === null) return;
-		void goto(resolve('/[locale]/wallet', { locale: data.locale }), { replaceState: true });
+		// Only the address changes: a shallow replace, not a navigation — a
+		// navigation would be abandoned by the flow step pushed just below.
+		void replaceUrl(resolve('/[locale]/wallet', { locale: data.locale }));
 		if (handoff.kind === 'receive') {
 			nav.enter('receive');
 			return;
@@ -2985,7 +3008,7 @@
 {/snippet}
 
 <!-- "Get Vela on your phone" — draws nothing until the store links exist
-     (`$lib/app-prompt/config.ts`), and never again once closed. -->
+     (`#lib/app-prompt/config.ts`), and never again once closed. -->
 {#snippet appPrompt()}
 	<!-- r4D-7, r4D-8: the multisig's own lines — what waits here, its first steps. -->
 	<MultisigHomeCard

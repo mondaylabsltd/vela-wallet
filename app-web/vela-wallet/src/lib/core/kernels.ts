@@ -10,57 +10,57 @@
  * exports; money code imports THIS module and nothing from the wasm glue
  * directly.
  */
-import type { SignedReview } from '$lib/core/generated/SignedReview';
-import type { RpcCallVerdict } from '$lib/core/generated/RpcCallVerdict';
-import type { RpcKind } from '$lib/core/generated/RpcKind';
-import type { RpcTransportOutcome } from '$lib/core/generated/RpcTransportOutcome';
+import type { SignedReview } from '#lib/core/generated/SignedReview.ts';
+import type { RpcCallVerdict } from '#lib/core/generated/RpcCallVerdict.ts';
+import type { RpcKind } from '#lib/core/generated/RpcKind.ts';
+import type { RpcTransportOutcome } from '#lib/core/generated/RpcTransportOutcome.ts';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
-import type { Assertion } from '$lib/onboarding/core/passkey';
-import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
-import type { SigningPage } from '$lib/core/generated/SigningPage';
-import type { SigningPlan } from '$lib/core/generated/SigningPlan';
-import type { Account } from '$lib/core/generated/Account';
-import type { Identity } from '$lib/core/generated/Identity';
-import type { SigningRoute } from '$lib/core/generated/SigningRoute';
-import type { SigningSurface } from '$lib/core/generated/SigningSurface';
-import type { KeyLabel } from '$lib/core/generated/KeyLabel';
-import type { Registration } from '$lib/onboarding/generated/Registration';
-import type { Assertion as CeremonyAssertion } from '$lib/onboarding/generated/Assertion';
-import { SIGNING_SURFACE } from '$lib/signing/surface';
-import type { SigningVenue } from '$lib/core/generated/SigningVenue';
-import type { VenueBlock } from '$lib/core/generated/VenueBlock';
-import type { VenueChoice } from '$lib/core/generated/VenueChoice';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { SendEstimateFailure } from '$lib/core/generated/SendEstimateFailure';
-import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
-import type { ReadSlot } from '$lib/core/generated/ReadSlot';
-import type { SignEnding } from '$lib/core/generated/SignEnding';
-import type { SignEndingState } from '$lib/core/generated/SignEndingState';
-import type { SignErrorKind } from '$lib/core/generated/SignErrorKind';
-import type { SignResponsePayload } from '$lib/core/generated/SignResponsePayload';
-import type { StableRef } from '$lib/core/generated/StableRef';
-import type { TokenRef } from '$lib/core/generated/TokenRef';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
-import type { TrackStatusAnswer } from '$lib/core/generated/TrackStatusAnswer';
-import type { TrackView } from '$lib/core/generated/TrackView';
-import type { InFlightOp } from '$lib/core/generated/InFlightOp';
-import type { ConfirmState } from '$lib/core/generated/ConfirmState';
-import type { LandingPace } from '$lib/core/generated/LandingPace';
-import type { DappChainAsk } from '$lib/core/generated/DappChainAsk';
-import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
-import type { SignView } from '$lib/core/generated/SignView';
-import type { GuardView } from '$lib/core/generated/GuardView';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { MarkView } from '$lib/core/generated/MarkView';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
-import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
-import type { TrustSimView } from '$lib/core/generated/TrustSimView';
-import type { TrustTokenMeta } from '$lib/core/generated/TrustTokenMeta';
-import type { IncomingScanPlan } from '$lib/core/generated/IncomingScanPlan';
-import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
+import type { Assertion } from '#lib/onboarding/core/passkey.ts';
+import type { IntegrityLine } from '#lib/core/generated/IntegrityLine.ts';
+import type { SigningPage } from '#lib/core/generated/SigningPage.ts';
+import type { SigningPlan } from '#lib/core/generated/SigningPlan.ts';
+import type { Account } from '#lib/core/generated/Account.ts';
+import type { Identity } from '#lib/core/generated/Identity.ts';
+import type { SigningRoute } from '#lib/core/generated/SigningRoute.ts';
+import type { SigningSurface } from '#lib/core/generated/SigningSurface.ts';
+import type { KeyLabel } from '#lib/core/generated/KeyLabel.ts';
+import type { Registration } from '#lib/onboarding/generated/Registration.ts';
+import type { Assertion as CeremonyAssertion } from '#lib/onboarding/generated/Assertion.ts';
+import { SIGNING_SURFACE } from '#lib/signing/surface.ts';
+import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
+import type { VenueBlock } from '#lib/core/generated/VenueBlock.ts';
+import type { VenueChoice } from '#lib/core/generated/VenueChoice.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
+import type { SendEstimateFailure } from '#lib/core/generated/SendEstimateFailure.ts';
+import type { FeedDappContent } from '#lib/core/generated/FeedDappContent.ts';
+import type { ReadSlot } from '#lib/core/generated/ReadSlot.ts';
+import type { SignEnding } from '#lib/core/generated/SignEnding.ts';
+import type { SignEndingState } from '#lib/core/generated/SignEndingState.ts';
+import type { SignErrorKind } from '#lib/core/generated/SignErrorKind.ts';
+import type { SignResponsePayload } from '#lib/core/generated/SignResponsePayload.ts';
+import type { StableRef } from '#lib/core/generated/StableRef.ts';
+import type { TokenRef } from '#lib/core/generated/TokenRef.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
+import type { TrackStatusAnswer } from '#lib/core/generated/TrackStatusAnswer.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
+import type { InFlightOp } from '#lib/core/generated/InFlightOp.ts';
+import type { ConfirmState } from '#lib/core/generated/ConfirmState.ts';
+import type { LandingPace } from '#lib/core/generated/LandingPace.ts';
+import type { DappChainAsk } from '#lib/core/generated/DappChainAsk.ts';
+import type { DappAddOutcome } from '#lib/core/generated/DappAddOutcome.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import type { GuardView } from '#lib/core/generated/GuardView.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { MarkView } from '#lib/core/generated/MarkView.ts';
+import type { SimVerdict } from '#lib/core/generated/SimVerdict.ts';
+import type { TrustAssetDelta } from '#lib/core/generated/TrustAssetDelta.ts';
+import type { TrustSimView } from '#lib/core/generated/TrustSimView.ts';
+import type { TrustTokenMeta } from '#lib/core/generated/TrustTokenMeta.ts';
+import type { IncomingScanPlan } from '#lib/core/generated/IncomingScanPlan.ts';
+import type { TrustScanFacts } from '#lib/core/generated/TrustScanFacts.ts';
 
 export {
 	PROXY_CREATION_CODE,
@@ -792,7 +792,7 @@ export function multisigApprovalRoute(account: unknown): ApprovalRoute | null {
  * build cannot read, or a method no venue signs (`eth_sign`, anything
  * unknown).
  *
- * On THIS build's surface (R8, `$lib/signing/surface.ts`): in the Safari
+ * On THIS build's surface (R8, `#lib/signing/surface.ts`): in the Safari
  * package, whose pages cannot use a `getvela.app` passkey, nothing is answered
  * `in_vela` — a Vela-sheet account signs on the official page. `surface`
  * stands in for the build in tests and the shared vectors.

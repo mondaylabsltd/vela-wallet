@@ -9,9 +9,9 @@
  */
 import { flushSync } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { loadCore } from '$lib/core/client';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import { moneyText, unitAdornment } from '$lib/wallet/live';
+import { loadCore } from '#lib/core/client.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import { moneyText, unitAdornment } from '#lib/wallet/live.ts';
 import { pageLanguage, setPageLanguage } from './page-language.svelte';
 
 const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true, pending: null };

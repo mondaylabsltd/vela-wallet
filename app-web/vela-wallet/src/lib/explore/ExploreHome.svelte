@@ -1,16 +1,16 @@
 <script lang="ts">
-	import SectionHeader from '$lib/wallet/ui/SectionHeader.svelte';
-	import TabBar from '$lib/wallet/ui/TabBar.svelte';
-	import SigningSheet from '$lib/signing/SigningSheet.svelte';
-	import type { SigningModel } from '$lib/signing/model';
-	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
-	import type { ScanModel } from '$lib/flows/model';
+	import SectionHeader from '#lib/wallet/ui/SectionHeader.svelte';
+	import TabBar from '#lib/wallet/ui/TabBar.svelte';
+	import SigningSheet from '#lib/signing/SigningSheet.svelte';
+	import type { SigningModel } from '#lib/signing/model.ts';
+	import ScanSurface from '#lib/flows/ui/ScanSurface.svelte';
+	import type { ScanModel } from '#lib/flows/model.ts';
 	import {
 		boardSession,
 		scanner,
 		scanNotice,
 		type ScanNoticeMessages
-	} from '$lib/flows/core/scanner.svelte';
+	} from '#lib/flows/core/scanner.svelte.ts';
 	import { exploreScanUrl } from './scan';
 	import AddressBar from './ui/AddressBar.svelte';
 	import ConnectionPanel from './ui/ConnectionPanel.svelte';
@@ -18,7 +18,7 @@
 	import ExploreEmpty from './ui/ExploreEmpty.svelte';
 	import GroupManageSheet from './ui/GroupManageSheet.svelte';
 	import SearchField from './ui/SearchField.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
 	import SiteMenuSheet from './ui/SiteMenuSheet.svelte';
 	import SiteRow from './ui/SiteRow.svelte';
 	import SiteTile from './ui/SiteTile.svelte';

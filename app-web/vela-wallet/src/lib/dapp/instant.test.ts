@@ -11,7 +11,7 @@
  */
 // The same one-shot Node init every build-time core consumer uses: `loadCore()`
 // fetches an absolute URL, which no Node process can resolve.
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { decidePopupRequest } from './core/dperm-popup';
 import { popupCloseSettlement } from './core/dperm-connect';
@@ -25,7 +25,7 @@ import {
 	resolveGrantedAccounts
 } from '../../../extension/lib/protocol.js';
 import { encode } from './request';
-import { signRequestTtlMs } from '$lib/core/kernels';
+import { signRequestTtlMs } from '#lib/core/kernels.ts';
 import type { DAppGrant } from './grants';
 
 const ALICE = `0x${'a1'.repeat(20)}`;

@@ -8,7 +8,7 @@
  *   - a public plain-http origin is not asked to sign for.
  */
 // The same one-shot Node init every build-time core consumer uses.
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DAppGrant } from './grants';
 
@@ -24,8 +24,8 @@ const grant = (origin: string): DAppGrant => ({
 const stored = new Map<string, DAppGrant>();
 const answers: { rid: string; answer: unknown }[] = [];
 
-vi.mock('$lib/core/client', async (real) => ({
-	...(await real<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (real) => ({
+	...(await real<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 vi.mock('./grants', () => ({

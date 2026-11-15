@@ -5,7 +5,7 @@
  * checked by looking at it. These are the promises it makes to a person who is
  * watching a transaction, stated as numbers.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { ringProgress } from './ring';
 

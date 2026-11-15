@@ -11,22 +11,22 @@
  * shape would lose `sender` (nothing held) or `stalled` (held forever); the
  * kernel tests below pin both.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { InFlightOp } from '$lib/core/generated/InFlightOp';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
+import type { InFlightOp } from '#lib/core/generated/InFlightOp.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
 
 const net = vi.hoisted(() => ({ landed: null as string | null }));
 
-vi.mock('$lib/core/client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
-vi.mock('$lib/services/records', () => ({
+vi.mock('#lib/services/records.ts', () => ({
 	loadTransactions: vi.fn(async () => []),
 	updateTransactions: vi.fn(async () => {})
 }));
-vi.mock('$lib/services/tx-reconciler', () => ({
+vi.mock('#lib/services/tx-reconciler.ts', () => ({
 	pollUserOpStatus: vi.fn(async () => null),
 	// Accepted and on its way until the test says it landed.
 	requestUserOpReceipt: vi.fn(async () =>
@@ -38,12 +38,12 @@ vi.mock('$lib/services/tx-reconciler', () => ({
 				}
 	)
 }));
-vi.mock('$lib/services/rpc-adapter', () => ({ rpcCall: vi.fn(async () => ({ result: null })) }));
-vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { refresh: vi.fn() } }));
-vi.mock('$lib/wallet/core/feed.svelte', () => ({ feed: { reconciled: vi.fn() } }));
+vi.mock('#lib/services/rpc-adapter.ts', () => ({ rpcCall: vi.fn(async () => ({ result: null })) }));
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({ balance: { refresh: vi.fn() } }));
+vi.mock('#lib/wallet/core/feed.svelte.ts', () => ({ feed: { reconciled: vi.fn() } }));
 vi.mock('./token-trust-resident', () => ({ notifyReceiptLogsConfirmed: vi.fn() }));
 
-import { inFlightOps } from '$lib/core/kernels';
+import { inFlightOps } from '#lib/core/kernels.ts';
 import {
 	dispatchTxTracker,
 	outcomeOf,

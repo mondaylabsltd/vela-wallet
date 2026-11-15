@@ -13,8 +13,8 @@
 	 * the same press, so the group reads as rows, not as a list of links.
 	 */
 	import type { SettingsRowModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import StatusPill from './StatusPill.svelte';
 
 	interface Props {

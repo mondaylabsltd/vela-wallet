@@ -21,19 +21,22 @@
  * 483, `read_deployment`): its read is the fee's own, so its failure is the
  * fee's failure — on the row, the footer and the retry alike.
  */
-import { loadCore } from '$lib/core/client';
-import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeEvent } from '$lib/core/generated/FeeEvent';
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import { invalidateFeeSignals, type TransactionFeeEstimate } from '$lib/services/safe-transaction';
-import { resolvedFormatKeys } from '$lib/services/locale-format';
+import { loadCore } from '#lib/core/client.ts';
+import type { FeeBalanceChange } from '#lib/core/generated/FeeBalanceChange.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeEvent } from '#lib/core/generated/FeeEvent.ts';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import {
+	invalidateFeeSignals,
+	type TransactionFeeEstimate
+} from '#lib/services/safe-transaction.ts';
+import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
-import { publicKeyShouldVanish } from '$lib/services/fault-injection';
+import { publicKeyShouldVanish } from '#lib/services/fault-injection.ts';
 
 /**
  * The tier a request that names none is priced at: the core's own factory

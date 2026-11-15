@@ -11,26 +11,26 @@
  * Loaded only when the person has turned the agent on (the root layout and
  * Settings import it dynamically), so the Welcome page never carries it.
  */
-import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { feed } from '$lib/wallet/core/feed.svelte';
-import { intentAgentReads, intentCatalog, loadCore } from '$lib/core/client';
-import type { IntentReason } from '$lib/core/generated/IntentReason';
-import { worldJson } from '$lib/intents/world';
-import type { IntentAction } from '$lib/core/generated/IntentAction';
-import type { IntentCatalogEntry } from '$lib/core/generated/IntentCatalogEntry';
-import { intents, world, type IntentOutcome } from '$lib/intents/index.svelte';
-import { agentState } from '$lib/intents/state';
-import type { IntentOperationState } from '$lib/core/generated/IntentOperationState';
-import { transfers } from '$lib/intents/transfers.svelte';
-import { reviewOf } from '$lib/intents/review';
-import { sendDesk } from '$lib/flows/send-desk.svelte';
-import { session } from '$lib/session/core/session.svelte';
-import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-import { signRequest } from '$lib/signing/core/sign-resident.svelte';
+import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
+import { intentAgentReads, intentCatalog, loadCore } from '#lib/core/client.ts';
+import type { IntentReason } from '#lib/core/generated/IntentReason.ts';
+import { worldJson } from '#lib/intents/world.ts';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+import type { IntentCatalogEntry } from '#lib/core/generated/IntentCatalogEntry.ts';
+import { intents, world, type IntentOutcome } from '#lib/intents/index.svelte.ts';
+import { agentState } from '#lib/intents/state.ts';
+import type { IntentOperationState } from '#lib/core/generated/IntentOperationState.ts';
+import { transfers } from '#lib/intents/transfers.svelte.ts';
+import { reviewOf } from '#lib/intents/review.ts';
+import { sendDesk } from '#lib/flows/send-desk.svelte.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
 import { accepted, ClientMCP, completed, rejected, type Risk, type Status } from './clientmcp';
 import { agentSettings } from './settings.svelte';
-import { shownAddress } from '$lib/multisig/core/shown';
+import { shownAddress } from '#lib/multisig/core/shown.ts';
 import { exposeAdvisor } from './advisor.svelte';
 import { ADVISOR_INSTRUCTIONS } from './advisor';
 import { sheetFacts } from './advice.svelte';

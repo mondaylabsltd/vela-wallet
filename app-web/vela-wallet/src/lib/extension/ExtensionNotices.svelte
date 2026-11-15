@@ -16,7 +16,7 @@
 	 *   the worker opened says to reload them, once.
 	 */
 	import { onMount } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import { INSTALLED_KEY } from '../../../extension/lib/locales.js';
 	import type { ExtensionMessages } from './messages';
 	import { isPackagedApp } from './page-url';

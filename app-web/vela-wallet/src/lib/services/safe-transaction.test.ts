@@ -1,5 +1,5 @@
 /** Ported from src/__tests__/services/safe-transaction.test.ts @ f9bcb278 — vitest; the core is initialised by the server-side wasm init. */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, test, vi } from 'vitest';
 
 const rpcMock = vi.hoisted(() => ({
@@ -48,7 +48,7 @@ import {
 	userOpHash as localUserOpHash,
 	userOpNotSentDetail,
 	userOpPreviousPendingDetail
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import { PoolFailedError } from './rpc-pool';
 
 /** Uint8Array → lowercase hex (no 0x), for golden-vector assertions. */
@@ -462,7 +462,7 @@ import {
 	signerAddressFor,
 	type WalletKeySet
 } from './safe-transaction';
-import { computeWebauthnSignerAddress, toHex, WEBAUTHN_SIGNER } from '$lib/core/kernels';
+import { computeWebauthnSignerAddress, toHex, WEBAUTHN_SIGNER } from '#lib/core/kernels.ts';
 
 const KEY_A =
 	'04a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90b1c2d3e4f50617283940a1b2c3d4e5f6b1c2d3e4f50617283940a1b2c3d4e5f6';

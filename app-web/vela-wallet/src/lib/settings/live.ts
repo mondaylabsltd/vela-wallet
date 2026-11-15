@@ -9,39 +9,39 @@
  * core's module doc assigns to shells.
  */
 
-import { showsFiat } from '$lib/network-space/fiat';
-import { accountName } from '$lib/multisig/core/account-name';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import { accountName } from '#lib/multisig/core/account-name.ts';
 import { resetEndpointsQuestion } from './questions';
-import { fill } from '$lib/wallet/messages';
-import { pluralForm } from '$lib/i18n/plural';
-import { shortenAddress } from '$lib/wallet/identity';
+import { fill } from '#lib/wallet/messages.ts';
+import { pluralForm } from '#lib/i18n/plural.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 import { currencyDisplayName } from './core/currency-catalog';
-import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
-import { fiatSymbol, maskedAmount } from '$lib/core/client';
-import { pageLanguage } from '$lib/i18n/page-language.svelte';
-import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
+import { moneyText, trimBalance, unreachableLine } from '#lib/wallet/live.ts';
+import { fiatSymbol, maskedAmount } from '#lib/core/client.ts';
+import { pageLanguage } from '#lib/i18n/page-language.svelte.ts';
+import type { SessionAccountRow } from '#lib/core/generated/SessionAccountRow.ts';
 import {
 	formatBytes,
 	type DeviceStorageReport,
 	type StorageItemId,
 	type StorageItemReport
-} from '$lib/services/device-storage';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { SendRelayUnreachable } from '$lib/core/generated/SendRelayUnreachable';
-import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
-import { chainName } from '$lib/services/networks';
-import { encodeQr } from '$lib/wallet/qr';
-import { MASK } from '$lib/wallet/fixtures';
+} from '#lib/services/device-storage.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { SendRelayUnreachable } from '#lib/core/generated/SendRelayUnreachable.ts';
+import type { SendTreasuryStatus } from '#lib/core/generated/SendTreasuryStatus.ts';
+import { chainName } from '#lib/services/networks.ts';
+import { encodeQr } from '#lib/wallet/qr.ts';
+import { MASK } from '#lib/wallet/fixtures.ts';
 
-import type { NetChainIndexEntry } from '$lib/core/generated/NetChainIndexEntry';
-import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
-import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
-import type { NetProbeHealth } from '$lib/core/generated/NetProbeHealth';
-import type { NetServiceHealth } from '$lib/core/generated/NetServiceHealth';
-import type { NetView } from '$lib/core/generated/NetView';
-import type { NetWizardView } from '$lib/core/generated/NetWizardView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
+import type { NetChainIndexEntry } from '#lib/core/generated/NetChainIndexEntry.ts';
+import type { NetCompatibility } from '#lib/core/generated/NetCompatibility.ts';
+import type { NetNetworkRow } from '#lib/core/generated/NetNetworkRow.ts';
+import type { NetProbeHealth } from '#lib/core/generated/NetProbeHealth.ts';
+import type { NetServiceHealth } from '#lib/core/generated/NetServiceHealth.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import type { NetWizardView } from '#lib/core/generated/NetWizardView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeeTierPrefView } from '#lib/core/generated/FeeTierPrefView.ts';
 import {
 	dateFormatOptions,
 	formatDate,
@@ -50,13 +50,17 @@ import {
 	numberFormatOptions,
 	timeFormatOptions,
 	type FormatOption
-} from '$lib/services/locale-format';
-import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
-import { chainLogoURL } from '$lib/flows/marks';
+} from '#lib/services/locale-format.ts';
+import {
+	preferences,
+	TEXT_SCALE_LEVELS,
+	type ThemeChoice
+} from '#lib/services/preferences.svelte.ts';
+import { chainLogoURL } from '#lib/flows/marks.ts';
 import { chainMeta, feedbackPanel, languageRows, markFor } from './fixtures';
 import type { SettingsMessages } from './messages';
-import type { NetworkSpaceMessages } from '$lib/network-space/messages';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
+import type { NetworkSpaceMessages } from '#lib/network-space/messages.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
 import type {
 	AddNetworkModel,
 	BalanceDetailModel,
@@ -84,8 +88,8 @@ import {
 	environmentLines,
 	type DeviceFacts,
 	type EnvironmentLabels
-} from '$lib/services/bug-report';
-import type { EthereumBackupRow } from '$lib/services/registry-backup';
+} from '#lib/services/bug-report.ts';
+import type { EthereumBackupRow } from '#lib/services/registry-backup.ts';
 import {
 	netRefusal,
 	netRpcField,
@@ -94,8 +98,8 @@ import {
 	type NetRefusal
 } from './net-refusal';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
-import type { WalletKeys } from '$lib/services/wallet-keys';
-import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
+import type { WalletKeys } from '#lib/services/wallet-keys.ts';
+import type { CreateKeyRow } from '#lib/onboarding/generated/CreateKeyRow.ts';
 
 // ---------------------------------------------------------------------------
 // Badges — the probe/health vocabularies, worded once.

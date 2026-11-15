@@ -9,7 +9,7 @@
  */
 import { cubicOut } from 'svelte/easing';
 import type { TransitionConfig } from 'svelte/transition';
-import { MOTION } from '$lib/tokens/tokens';
+import { MOTION } from '#lib/tokens/tokens.ts';
 
 function duration(): number {
 	const still =

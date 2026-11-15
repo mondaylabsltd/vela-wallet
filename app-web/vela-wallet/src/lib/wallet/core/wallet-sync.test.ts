@@ -11,7 +11,7 @@
  * announced back (no two documents keep each other reading).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
 
 const resident = vi.hoisted(() => {
 	let listener: ((view: unknown) => void) | null = null;
@@ -42,17 +42,17 @@ vi.mock('./balance-resident', async (original) => {
 		subscribeBalanceDashboard: resident.subscribe
 	};
 });
-vi.mock('$lib/core/client', () => ({ loadCore: async () => {} }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('#lib/core/client.ts', () => ({ loadCore: async () => {} }));
+vi.mock('#lib/services/networks.ts', () => ({
 	ensureCustomNetworks: async () => {},
 	ensureShownNetworks: async () => {},
 	inSpace: () => true
 }));
-vi.mock('$lib/services/holdings-cache', () => ({
+vi.mock('#lib/services/holdings-cache.ts', () => ({
 	loadHoldings: async () => [],
 	saveHoldings: async () => {}
 }));
-vi.mock('$lib/network-space/network-space.svelte', () => ({
+vi.mock('#lib/network-space/network-space.svelte.ts', () => ({
 	networkSpace: { current: 'mainnet', subscribe: () => () => {} }
 }));
 vi.mock('./privacy-sync', () => ({ onPrivacyElsewhere: () => {} }));

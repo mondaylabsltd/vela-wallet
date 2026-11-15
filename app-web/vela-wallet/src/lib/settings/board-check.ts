@@ -16,7 +16,7 @@
  * the boards' venue rows, which are literal fixtures the core is asked to
  * produce.
  */
-import { signerIntegrityTime } from '$lib/core/kernels';
+import { signerIntegrityTime } from '#lib/core/kernels.ts';
 
 /** 14:32 UTC, read at 15:02 the same day, in UTC. */
 export const BOARD_CHECK = {

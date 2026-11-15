@@ -6,7 +6,7 @@
  * one node answered" or "the two disagree" passes its own `rpcCorroborated`.
  * The wasm must be initialized first.
  */
-import { rpcCorroboratedEnvelope } from '$lib/core/kernels';
+import { rpcCorroboratedEnvelope } from '#lib/core/kernels.ts';
 import type { MultisigShellDeps } from './handler';
 
 /** `rpc`'s answer, given by two independent nodes alike. Throws as `rpc` throws. */

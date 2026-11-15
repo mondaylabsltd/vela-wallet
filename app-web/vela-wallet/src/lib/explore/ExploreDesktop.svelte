@@ -1,10 +1,10 @@
 <script lang="ts">
-	import SectionHeader from '$lib/wallet/ui/SectionHeader.svelte';
-	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
-	import ThirdPanel from '$lib/wallet/ui/ThirdPanel.svelte';
-	import SigningPanel from '$lib/signing/SigningPanel.svelte';
-	import type { SigningModel } from '$lib/signing/model';
-	import type { SidebarModel } from '$lib/wallet/model';
+	import SectionHeader from '#lib/wallet/ui/SectionHeader.svelte';
+	import Sidebar from '#lib/wallet/ui/Sidebar.svelte';
+	import ThirdPanel from '#lib/wallet/ui/ThirdPanel.svelte';
+	import SigningPanel from '#lib/signing/SigningPanel.svelte';
+	import type { SigningModel } from '#lib/signing/model.ts';
+	import type { SidebarModel } from '#lib/wallet/model.ts';
 	import ConnectionPanel from './ui/ConnectionPanel.svelte';
 	import ContextMenu from './ui/ContextMenu.svelte';
 	import DemoPage from './ui/DemoPage.svelte';

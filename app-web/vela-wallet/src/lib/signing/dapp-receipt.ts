@@ -16,12 +16,12 @@
  * already gone out** before any of this is drawn. Nothing here can swallow,
  * delay or duplicate one (spec 077, "The invariant this must not break").
  */
-import type { ReceiptStage } from '$lib/flows/model';
-import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
-import type { SignEndingState } from '$lib/core/generated/SignEndingState';
-import { signEndingState } from '$lib/core/kernels';
-import { ringProgress } from '$lib/flows/ui/ring';
+import type { ReceiptStage } from '#lib/flows/model.ts';
+import type { SignMethodKind } from '#lib/core/generated/SignMethodKind.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
+import type { SignEndingState } from '#lib/core/generated/SignEndingState.ts';
+import { signEndingState } from '#lib/core/kernels.ts';
+import { ringProgress } from '#lib/flows/ui/ring.ts';
 
 /** The send receipt's words, as the request surface already resolves them. */
 export interface DappReceiptCopy {

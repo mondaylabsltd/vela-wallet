@@ -12,7 +12,7 @@
 	 * the person to tick that they understand it.
 	 */
 	import type { ConfirmSheetModel } from '../model';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import Callout from './Callout.svelte';
 
 	interface Props {

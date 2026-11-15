@@ -9,7 +9,7 @@
 	 * either to drift down.
 	 */
 	import type { Snippet } from 'svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
 	import FlowScreen from './ui/FlowScreen.svelte';
 	import ScanSurface from './ui/ScanSurface.svelte';
 	import ShareCard from './ui/ShareCard.svelte';

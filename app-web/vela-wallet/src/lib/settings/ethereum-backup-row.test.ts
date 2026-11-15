@@ -9,13 +9,13 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { CHECKING_ROW, type EthereumBackupRow } from '$lib/services/registry-backup';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { CHECKING_ROW, type EthereumBackupRow } from '#lib/services/registry-backup.ts';
 import { ethereumBackupRow, walletKeysModel } from './live';
 import { BACKUP_EXPLAIN_KEYS, BACKUP_ROW_KEYS } from './messages';
-import { deviceKeys } from '$lib/services/wallet-keys';
-import type { WalletKeyRow, WalletKeys } from '$lib/services/wallet-keys';
+import { deviceKeys } from '#lib/services/wallet-keys.ts';
+import type { WalletKeyRow, WalletKeys } from '#lib/services/wallet-keys.ts';
 
 const m = resolveSettingsMessages('en');
 /** The paragraph under the block, in English. */

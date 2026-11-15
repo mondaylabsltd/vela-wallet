@@ -10,15 +10,15 @@
  * `token-trust-session.ts` is the native counterpart and throws.
  */
 
-import { TokenTrustCore } from '$lib/core/client';
+import { TokenTrustCore } from '#lib/core/client.ts';
 
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
 
 import { executeTokenTrustOperation, tokenTrustOperationFailure } from './token-trust-executor';
-import type { TrustEvent } from '$lib/core/generated/TrustEvent';
-import type { TrustShellResult } from '$lib/core/generated/TrustShellResult';
-import type { TrustView } from '$lib/core/generated/TrustView';
+import type { TrustEvent } from '#lib/core/generated/TrustEvent.ts';
+import type { TrustShellResult } from '#lib/core/generated/TrustShellResult.ts';
+import type { TrustView } from '#lib/core/generated/TrustView.ts';
 import type { TrustEffect, TokenTrustSessionOptions } from './token-trust-types';
 
 export type TokenTrustSession = EffectLoop<TrustEvent>;

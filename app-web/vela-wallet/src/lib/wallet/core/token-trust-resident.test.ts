@@ -5,17 +5,17 @@
  * here: what it does with them is pinned in Rust (`app_incoming_scan.rs`).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TrustEvent } from '$lib/core/generated/TrustEvent';
-import type { TrustView } from '$lib/core/generated/TrustView';
-import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
+import type { TrustEvent } from '#lib/core/generated/TrustEvent.ts';
+import type { TrustView } from '#lib/core/generated/TrustView.ts';
+import type { TrustScanFacts } from '#lib/core/generated/TrustScanFacts.ts';
 
 const kv = vi.hoisted(() => new Map<string, string>());
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: async (key: string) => kv.get(key) ?? null,
 	setItem: async (key: string, value: string) => void kv.set(key, value)
 }));
-vi.mock('$lib/services/chain-tokens', () => ({ fetchChainTokens: async () => null }));
-vi.mock('$lib/services/wallet-api', () => ({ getCachedHeldTokens: () => [] }));
+vi.mock('#lib/services/chain-tokens.ts', () => ({ fetchChainTokens: async () => null }));
+vi.mock('#lib/services/wallet-api.ts', () => ({ getCachedHeldTokens: () => [] }));
 
 const machine = vi.hoisted(() => ({
 	events: [] as TrustEvent[],

@@ -4,8 +4,8 @@
  * card never describes one call while another is sent.
  */
 
-import type { ClearLocale } from '$lib/core/generated/ClearLocale';
-import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
+import type { ClearLocale } from '#lib/core/generated/ClearLocale.ts';
+import type { ClearSigningEvent } from '#lib/core/generated/ClearSigningEvent.ts';
 
 /** A transaction's three params, as the two machines need them. */
 export interface TxParams {

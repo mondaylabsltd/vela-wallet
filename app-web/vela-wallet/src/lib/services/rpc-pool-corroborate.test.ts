@@ -5,17 +5,17 @@
  * call resolved with BOTH bodies; an ordinary read unchanged; "Only use my
  * node" trusted alone and said (`ownNode`). Fetch is mocked at the boundary.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
-vi.mock('$lib/core/client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 
@@ -26,8 +26,8 @@ const world = {
 		{ url: 'https://node.beta.example/', source: 'default' as const }
 	]
 };
-vi.mock('$lib/services/rpc-pool-endpoints', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/rpc-pool-endpoints')>()),
+vi.mock('#lib/services/rpc-pool-endpoints.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/rpc-pool-endpoints.ts')>()),
 	collectRpcUrls: vi.fn(async () => world.endpoints),
 	collectBundlerUrls: vi.fn(async () => [
 		{ url: 'https://relay.example/1', source: 'builtin' as const }
