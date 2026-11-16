@@ -1003,6 +1003,7 @@ jobs:
         with:
           version: v1.5.1
       - name: Build and test
+        id: test
         working-directory: app-ios/VelaWallet
         env:
           PERF_TEST: VelaWalletTests/SendReceiptFollowsTrackerTests/theConfirmReachesThePromptOnAnInstantNetwork()
@@ -1066,9 +1067,13 @@ jobs:
             # Passed only on the retry: name them.
             grep -oE "Test Case '-\[[^]]+\]' (passed|failed)" "$RUNNER_TEMP/xcodebuild.log" \
               | awk '{name=$3" "$4; if ($5=="failed") f[name]=1; else if (f[name]) print name}' \
-              | sort -u | while read -r t; do
-                  echo "::warning::flaky: $t failed, then passed on its retry"
-                done
+              | sort -u > "$RUNNER_TEMP/flaky.txt"
+            while read -r t; do
+              echo "::warning::flaky: $t failed, then passed on its retry"
+            done < "$RUNNER_TEMP/flaky.txt"
+            # Its results are kept too (below): a retry that passed is not an
+            # explanation, and the first attempt's screenshots are the evidence.
+            if [ -s "$RUNNER_TEMP/flaky.txt" ]; then echo "flaky=true" >> "$GITHUB_OUTPUT"; fi
           fi
           if [ "${{ matrix.leg }}" = unit ]; then
             ran=$(grep -oE 'Test run with [0-9]+ tests' "$RUNNER_TEMP/xcodebuild.log" | tail -1 | grep -oE '[0-9]+' || true)
@@ -1090,10 +1095,11 @@ jobs:
             grep -q 'Test run with 1 test' "$RUNNER_TEMP/perf.log" \
               || { echo "::error::the confirm → prompt guard did not run on its own"; exit 1; }
           fi
-      # A failed UI shard keeps its result bundle: the screenshot and element
-      # tree at each failure, which the log alone does not show.
-      - name: Keep the failed UI shard's results
-        if: failure() && startsWith(matrix.leg, 'ui')
+      # A UI shard with any failed attempt keeps its result bundle — failed,
+      # or passed only on a retry: the screenshot and element tree at each
+      # failure, which the log alone does not show.
+      - name: Keep the UI shard's results when a test failed
+        if: startsWith(matrix.leg, 'ui') && (failure() || steps.test.outputs.flaky == 'true')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-${{ matrix.leg }}-xcresult

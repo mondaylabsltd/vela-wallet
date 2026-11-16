@@ -174,6 +174,18 @@ final class ExploreNavigationScreenTests: XCTestCase {
         app.terminate()
     }
 
+    /// Every `#verdict` line the page has painted (`#last` and the log of
+    /// the last six), for a failure message. This read has failed on CI now
+    /// and then, and the message must say which it was: no answer at all
+    /// (the log never shows `eth_chainId`), or an answer that a later line —
+    /// a provider event the wallet pushed — took `#last` from.
+    private func painted(_ app: XCUIApplication) -> String {
+        let lines = app.webViews.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS %@ OR label BEGINSWITH %@", "#verdict", "#asked"))
+            .allElementsBoundByIndex.map(\.label)
+        return lines.isEmpty ? "the page painted no #verdict or #asked line" : "the page painted: " + lines.joined(separator: " | ")
+    }
+
     // MARK: - A live dApp, left and come back to
 
     /// The owner's two complaints, on a real page: the wallet is one tap from
@@ -207,7 +219,7 @@ final class ExploreNavigationScreenTests: XCTestCase {
         let last = app.webViews.staticTexts.containing(
             NSPredicate(format: "label BEGINSWITH %@", "#verdict eth_chainId")
         ).firstMatch
-        XCTAssertTrue(last.waitForExistence(timeout: 20), "the page's read was never answered")
+        XCTAssertTrue(last.waitForExistence(timeout: 20), "the page's read was never answered; \(painted(app))")
         attach(app.screenshot(), named: "live-01-page")
 
         // One tap to the wallet.
