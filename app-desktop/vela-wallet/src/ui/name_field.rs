@@ -31,7 +31,8 @@ pub enum EditChord {
 }
 
 /// Which clipboard chord `ks` is, if any — ⌘ on macOS, Ctrl on Windows and
-/// Linux (`Modifiers::secondary`).
+/// Linux (what `Modifiers::secondary` answers, for [`super::HOST_OS`]: gpui
+/// now asks an `App` for the host, and this has none in reach).
 ///
 /// Every field here first read `modifiers.platform`, which is ⌘ on a Mac and
 /// the WINDOWS key on Windows: Ctrl+V fell through to "a chord with Ctrl is
@@ -41,7 +42,12 @@ pub enum EditChord {
 #[must_use]
 pub fn edit_chord(ks: &Keystroke) -> Option<EditChord> {
     let m = &ks.modifiers;
-    if !m.secondary() || m.alt || (m.platform && m.control) {
+    let secondary = if super::HOST_OS == gpui::OperatingSystem::Mac {
+        m.platform
+    } else {
+        m.control
+    };
+    if !secondary || m.alt || (m.platform && m.control) {
         return None;
     }
     match ks.key.as_str() {
@@ -449,7 +455,7 @@ mod tests {
     use super::*;
 
     fn chord(keys: &str) -> Option<EditChord> {
-        edit_chord(&Keystroke::parse(keys).expect(keys))
+        edit_chord(&Keystroke::parse_with_os(keys, crate::ui::HOST_OS).expect(keys))
     }
 
     /// ⌘ on a Mac, Ctrl everywhere else — and never the other one. Windows

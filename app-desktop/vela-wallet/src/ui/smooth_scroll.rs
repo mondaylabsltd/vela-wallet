@@ -31,8 +31,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    Bounds, EntityId, Pixels, ScrollDelta, ScrollHandle, ScrollWheelEvent,
-    StatefulInteractiveElement, Styled, Window, point, px,
+    Bounds, EntityId, Pixels, ScrollDelta, ScrollEvent, ScrollHandle, StatefulInteractiveElement,
+    Styled, Window, point, px,
 };
 
 /// How far behind the newest trackpad report a frame is drawn: longer than
@@ -127,7 +127,7 @@ impl SmoothScroll {
         element
             .track_scroll(&self.handle)
             .overflow_y_hidden()
-            .on_scroll_wheel(move |event, _, cx| {
+            .on_scroll(move |event, _, cx| {
                 if this.push(event) {
                     cx.notify(view);
                     // Handled here, so a column around this one does not
@@ -178,7 +178,7 @@ impl SmoothScroll {
     /// Move the target by one wheel event. False when the column cannot move
     /// that way — at an end, or with nothing to scroll — so the event can go
     /// on to whatever is around it.
-    fn push(&self, event: &ScrollWheelEvent) -> bool {
+    fn push(&self, event: &ScrollEvent) -> bool {
         let (delta, trackpad) = match event.delta {
             ScrollDelta::Pixels(delta) => (f32::from(delta.y), true),
             ScrollDelta::Lines(delta) => (delta.y * PX_PER_LINE, false),

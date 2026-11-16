@@ -16489,7 +16489,7 @@ impl WalletPage {
                         match key {
                             // The bar lets go of the keyboard (RD5): the
                             // pending keyboard click is dropped with it.
-                            AddressKey::Go | AddressKey::Stop => window.blur(),
+                            AddressKey::Go | AddressKey::Stop => window.blur(cx),
                             AddressKey::Held => {}
                             AddressKey::NotMine => editor_keys(event, window, cx),
                         }

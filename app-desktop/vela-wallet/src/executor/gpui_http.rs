@@ -15,7 +15,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::http_client::{AsyncBody, HttpClient, Response, Result, Url, anyhow, http};
+use anyhow::{Result, anyhow};
+use gpui::http_client::{AsyncBody, HttpClient, Response, Url, http};
 
 use super::proxy;
 

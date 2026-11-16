@@ -503,7 +503,7 @@ mod tests {
         binding
             .keystrokes()
             .iter()
-            .map(gpui::KeybindingKeystroke::unparse)
+            .map(|keystroke| keystroke.unparse(crate::ui::HOST_OS))
             .collect()
     }
 

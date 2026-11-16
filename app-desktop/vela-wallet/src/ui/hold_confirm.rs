@@ -688,7 +688,8 @@ mod keyboard {
     /// then a key up, as the platform sends them (gpui turns an Enter or a
     /// Space pair into the focused control's keyboard click).
     fn press(cx: &mut VisualTestContext, key: &str) {
-        let keystroke = Keystroke::parse(key).unwrap_or_else(|e| unreachable!("{key}: {e}"));
+        let keystroke = Keystroke::parse_with_os(key, crate::ui::HOST_OS)
+            .unwrap_or_else(|e| unreachable!("{key}: {e}"));
         cx.simulate_event(KeyDownEvent {
             keystroke: keystroke.clone(),
             is_held: false,

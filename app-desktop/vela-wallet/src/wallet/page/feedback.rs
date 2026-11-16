@@ -2129,7 +2129,7 @@ impl WalletPage {
             .items_center()
             .justify_center()
             .gap(px(GAP))
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .on_scroll(|_, _, cx| cx.stop_propagation())
             .on_click(cx.listener(|this, _, window, cx| this.feedback_close_viewer(window, cx)));
         if count > 1 {
             layer = layer.child(

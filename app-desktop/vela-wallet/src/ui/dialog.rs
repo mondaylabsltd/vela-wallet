@@ -48,7 +48,7 @@ pub fn scrim(id: impl Into<ElementId>, theme: &Theme) -> Stateful<Div> {
         .items_center()
         .justify_center()
         .bg(theme.backdrop)
-        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+        .on_scroll(|_, _, cx| cx.stop_propagation())
 }
 
 /// The card itself: raised, hairline, radius 16, padding 24, the shadow.
