@@ -339,7 +339,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
           targets: wasm32-unknown-unknown
       # An exact version, its download checked against the release's own
       # sha256 by the action; no container.
@@ -374,6 +374,12 @@ jobs:
         run: bun audit --prod --audit-level=high
       - name: npm audit — the tooling package (high)
         run: npm audit --prefix scripts --audit-level=high
+      # The vendored client is rebuilt with the toolchain VENDOR.json records
+      # (what built the shipped bytes), not this job's: it has its own pin.
+      - name: The toolchain PeerConnect's VENDOR.json records
+        run: |
+          toolchain="$(jq -r .toolchain app-web/vela-wallet/src/lib/vendor/peerconnect/VENDOR.json)"
+          rustup toolchain install "$toolchain" --profile minimal --target wasm32-unknown-unknown
       - name: The vendored PeerConnect client rebuilds from its recorded commit
         env:
           VELA_PEERCONNECT_OUT: ${{ runner.temp }}/peerconnect
@@ -414,7 +420,7 @@ jobs:
 
   # The web core (`assets/wasm/vela_core_bg.*.wasm` + `rust/pkg-web`) is a
   # committed build. This rebuilds it from a clean export of the commit in the
-  # pinned container (rust/scripts/web-build.Dockerfile: rustc 1.97.1,
+  # pinned container (rust/scripts/web-build.Dockerfile: rustc 1.100.0,
   # wasm-pack 0.15.0, wasm-bindgen 0.2.126, binaryen 117, node 22.22.3) and
   # compares the bytes: the committed module IS what this commit builds, or
   # this fails. On main the CI-built module is also attested (GitHub build
@@ -468,7 +474,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -594,7 +600,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: rust
@@ -654,7 +660,7 @@ jobs:
             libdbus-1-dev
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -719,7 +725,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: app-desktop/vela-wallet
@@ -749,7 +755,7 @@ jobs:
           java-version: '17'
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: rust
@@ -940,7 +946,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
           targets: aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'

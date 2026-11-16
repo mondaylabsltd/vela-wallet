@@ -464,7 +464,7 @@ mod tests {
         let inked = |image: &RenderImage| {
             image
                 .as_bytes(0)
-                .is_some_and(|data| data.chunks_exact(4).any(|px| px[3] > 128))
+                .is_some_and(|data| data.as_chunks::<4>().0.iter().any(|px| px[3] > 128))
         };
         assert!(frames.iter().all(|frame| inked(frame)), "no blank step");
         // Cached: the same frames, not a second rasterization.

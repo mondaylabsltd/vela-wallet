@@ -52,7 +52,7 @@ Two notes that are easy to get wrong:
 
 ### Rust toolchain
 
-`rustc` **1.97.1**, matching the pin in [rust-toolchain.toml](../../rust/rust-toolchain.toml).
+`rustc` **1.100.0**, matching the pin in [rust-toolchain.toml](../../rust/rust-toolchain.toml).
 The crate is `edition = "2024"`, so older toolchains will not parse it.
 
 ---
@@ -544,8 +544,11 @@ Two things to know:
 
 The manifest prints `rustc --version` as its first build command, so a toolchain
 mismatch shows up as one line in the log rather than a wall of `edition2024`
-parse errors. On the `25.08` runtime the extension is **rustc 1.97.1**, exactly
-the version this crate pins.
+parse errors. On the `25.08` runtime the extension is **rustc 1.98.1** (the
+build log of 2026-11-16), behind the 1.100.0 the rest of the repository pins: the
+Flatpak is built by the SDK's compiler, not by `rust-toolchain.toml`, so this
+crate has to keep building on it. Try a toolchain change with the bundles too
+(`gh workflow run desktop-linux-packages.yml --ref <branch> -f flatpak=true`).
 
 #### Name resolution fails when the builder is itself a Flatpak
 
@@ -1182,7 +1185,7 @@ instead of reported upstream — re-verify each after any gpui bump.
 | Windows window cannot move or maximize | Run the current executable and use the titlebar controls or empty band above the Vela mark; see [Window controls](#window-controls) |
 | `pkg-config` cannot find `wayland-client`, `xkbcommon`, or `fontconfig` | The `-devel` / `-dev` packages are missing; the runtime library alone does not satisfy the build |
 | Build succeeds, window never appears, Vulkan error at startup | `vulkan-loader` is present but no ICD. Install `mesa-vulkan-drivers` (or your GPU vendor's driver) |
-| `edition2024` / unstable feature errors | Toolchain older than 1.97.1 |
+| `edition2024` / unstable feature errors | Toolchain older than the pin in `rust/rust-toolchain.toml` (1.100.0) |
 | Installed package shows a generic icon, or "vela-wallet" instead of "Vela Wallet", in the dock | The window's `app_id` no longer matches the `.desktop` file name. All six places — the five Linux ones plus the macOS `CFBundleIdentifier` — are asserted by the two packaging workflows' `metadata` jobs; see [main.rs:36](src/main.rs#L36) |
 | The package installs, then exits at startup with `Library libwayland-client.so could not be loaded` | A `dlopen`'d dependency is missing from the package. See [Runtime dependencies are not all in the ELF](#runtime-dependencies-are-not-all-in-the-elf) |
 | `.deb` refuses to install: `libc6 (>= 2.4x) is not installable` | It was linked on a newer distribution than the target. Build it in a `debian:12` container |
@@ -1190,6 +1193,6 @@ instead of reported upstream — re-verify each after any gpui bump.
 | `.deb` build: `value "X.Y" for key "Version" ... is not a known version`, `the .desktop file is invalid` | The `.desktop` `Version` key declares a spec version newer than the *validator* in the debian:12 container knows — Debian 12 ships desktop-file-utils 0.26, which predates spec 1.5. Keep `Version=1.0`; the key only names the spec the file follows. Local containers that never installed `desktop-file-utils` skip the validation entirely (the script guards on `command -v`), so this only surfaces in CI |
 | Flatpak compiles for minutes, then dies packaging with `Failed to execute child process "eu-strip"` | flatpak-builder splits debuginfo by exec'ing `eu-strip` on the **host**. Ubuntu only *Recommends* elfutils and the CI install uses `--no-install-recommends`, so it must be listed explicitly; Fedora's flatpak-builder pulls it, which is why local Fedora builds never see this |
 | Flatpak dies at `appstreamcli compose` with `file-read-error` — possibly on one architecture only | compose rasterizes the scalable SVG icon (it wants a 128x128@2 HiDPI variant no fixed-size directory provides) through the **host's** gdk-pixbuf, and the SVG loader lives in `librsvg2-common`, which nothing declares. The x64 ubuntu-24.04 runner image ships without it while the arm64 image happens to include it — so a green compose on one architecture says nothing about the other. Diagnosed with a 1-minute probe workflow that composes the committed packaging files directly (no app build); reuse that trick for any future compose failure |
-| Flatpak build fails inside `cargo build` with `edition2024` errors | The `rust-stable` SDK extension is older than 1.97.1. Check the `rustc --version` line at the top of the build log |
+| Flatpak build fails inside `cargo build` with `edition2024` errors | The `rust-stable` SDK extension is too old for the crate (it was 1.98.1 on 2026-11-16). Check the `rustc --version` line at the top of the build log |
 | Flatpak build fails with `failed to resolve address for github.com` | DNS does not work in a sandbox nested inside `org.flatpak.Builder`. See [Name resolution fails when the builder is itself a Flatpak](#name-resolution-fails-when-the-builder-is-itself-a-flatpak) |
 | App name appears in the GNOME app grid with no icon, but the dash icon is fine | The grid asks for 96px. If no `96x96` PNG exists the lookup falls through to `scalable/`, and an SVG whose `<svg>` tag sits past gdk-pixbuf's sniff window is not recognised as an image at all. Both are guarded by `scripts/generate-desktop-icons.sh` |

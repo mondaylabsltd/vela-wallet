@@ -53,7 +53,7 @@ The exit status is 0 only if every file is identical.
 
 | Tool | Version | Pinned by |
 | --- | --- | --- |
-| rustc, cargo, std | 1.97.1 | `rust-toolchain.toml`; the base image `rust:1.97.1-bookworm` by its index digest |
+| rustc, cargo, std | 1.100.0 | `rust-toolchain.toml`; the base image `rust:1.100.0-bookworm` by its index digest |
 | crates | `rust/Cargo.lock` | crates.io checksums (`--locked`) |
 | wasm-pack | 0.15.0 | built from crates.io with `--locked` |
 | wasm-bindgen CLI | 0.2.126 | equal to `wasm-bindgen` in `Cargo.lock`, built with `--locked` |
@@ -87,7 +87,7 @@ The exit status is 0 only if every file is identical.
 On a Mac, Docker runs the `linux/amd64` image under emulation: it is slow, and it needs
 several GB of memory for `vela-core`'s LTO. If Docker Hub is out of reach, set `VELA_BASE_IMAGE` to a
 mirror of the same digest, for example
-`VELA_BASE_IMAGE=m.daocloud.io/docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef…`. The
+`VELA_BASE_IMAGE=m.daocloud.io/docker.io/library/rust:1.100.0-bookworm@sha256:ade39a71…`. The
 script refuses any other digest. If Docker Desktop injects a proxy that its builds cannot use,
 `VELA_BUILD_ARGS="--build-arg HTTPS_PROXY= --build-arg HTTP_PROXY="` blanks it, and
 `VELA_BINARYEN_DIST` / `VELA_NODE_DIST` point the two tarballs at a mirror (their sha256 is

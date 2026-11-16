@@ -9,11 +9,7 @@
 # `_windowRestorationOptions` on an NSKeyedUnarchiver subclass. This copy is
 # upstream minus exactly those (see the `spec 095` comments in src/window.rs).
 # (The `CGSSetWindowBackgroundBlurRadius` import the first copy removed is gone
-# upstream since then.) One other edit, not spec 095's: Zed builds with Rust
-# 1.98.1 and this repository with 1.97.1, so upstream's three
-# `Option::map_or_default(f)` calls in src/window.rs read `.map(f)
-# .unwrap_or_default()` — the same value, marked `vela: … Rust 1.98`. Drop that
-# edit when the repository's toolchain reaches 1.98. Nothing else is changed.
+# upstream since then.) Nothing else is changed.
 # `scripts/check-store-binary.sh` asserts the result on the built binary.
 #
 # This manifest is upstream's with the workspace inheritance written out —

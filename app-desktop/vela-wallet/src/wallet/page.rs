@@ -22129,7 +22129,7 @@ impl WalletPage {
         // path already makes.
         let (width, height) = frame.dimensions();
         let mut bytes = frame.into_raw();
-        for pixel in bytes.chunks_exact_mut(4) {
+        for pixel in bytes.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
         let Some(bgra) = image::RgbaImage::from_raw(width, height, bytes) else {
