@@ -93,6 +93,11 @@
   </supports>
 
   <releases>
+    <release version="0.9.11" date="2026-11-16" type="development">
+      <description>
+        <p>Pre-release: Multisig accounts arrive on every platform: create one, add one you already belong to, or import a Safe{Wallet} export, then propose, approve and execute its transactions and change its members, with the same clear signing as your own account. When a safety check cannot be completed, signing says "... anyway" and needs a held press, and a new setting refuses such signing outright. The fee you see is the fee you sign, and a multisig request now expires instead of waiting forever. QR scanning is more reliable on the web, desktop and Android, and iPhone reads small photos better. Text uses your system's own fonts. Spreadsheet imports keep the stored number rather than its displayed rounding, and .xls and .xlsb files are no longer offered. The launch animation is lighter.</p>
+      </description>
+    </release>
     <release version="0.9.10" date="2026-11-13" type="development">
       <description>
         <p>Pre-release: Security: a site could get around the 0.9.9 Safe guard by writing an address without its 0x prefix, or by asking for a Safe message signature on a v1.5.0 Safe; both are now refused.</p>
