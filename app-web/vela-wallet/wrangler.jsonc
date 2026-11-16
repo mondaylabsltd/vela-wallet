@@ -13,5 +13,10 @@
 		"run_worker_first": ["/vela_core_bg.*"]
 	},
 	"workers_dev": true,
-	"preview_urls": true
+	"preview_urls": true,
+	// Workers Builds deploys a non-production branch with `wrangler preview`,
+	// which refuses to run without this block. It holds only what a Preview
+	// sets apart from production (bindings, vars, limits); the Worker has no
+	// such settings, and the assets above apply to Previews as they stand.
+	"previews": {}
 }
