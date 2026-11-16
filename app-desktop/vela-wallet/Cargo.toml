@@ -210,7 +210,7 @@ vela-passkey-win = { path = "../vela-passkey-win" }
 #     advert (CoreBluetooth on macOS, BlueZ on Linux, WinRT on Windows). btleplug
 #     is async-only, so a small current-thread runtime drives just the scan; the
 #     advert bytes come back and the runtime is done.
-tungstenite = { version = "0.24", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
 btleplug = "0.11"
 # `net` here is the I/O DRIVER, not networking — the cable tunnel opens no
 # socket through tokio (it is blocking tungstenite; the AI agent's socket, in
