@@ -1090,6 +1090,15 @@ jobs:
             grep -q 'Test run with 1 test' "$RUNNER_TEMP/perf.log" \
               || { echo "::error::the confirm → prompt guard did not run on its own"; exit 1; }
           fi
+      # A failed UI shard keeps its result bundle: the screenshot and element
+      # tree at each failure, which the log alone does not show.
+      - name: Keep the failed UI shard's results
+        if: failure() && startsWith(matrix.leg, 'ui')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-${{ matrix.leg }}-xcresult
+          path: ${{ runner.temp }}/${{ matrix.leg }}.xcresult
+          retention-days: 14
       # A count says the filter selected something; it does not say WHICH. The
       # suites that replay the core's shared vectors (docs/scenarios/
       # multisig.yaml, `vector_replays`) must each have run, every test in

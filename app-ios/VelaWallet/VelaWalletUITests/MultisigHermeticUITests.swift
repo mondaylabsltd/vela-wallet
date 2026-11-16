@@ -227,6 +227,18 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertGreaterThan(world.rpcAnswered("eth_simulateV1"), 0, "the chain never answered the simulation")
     }
 
+    /// What the world was asked, for a failure message: this step has failed
+    /// on CI now and then (the sheet never opened, the app's requests
+    /// trickling after a burst), and a screenshot alone does not say whether
+    /// the app was waiting on the world or the world on the chain.
+    private func trail(_ world: LocalMultisigWorld) -> String {
+        let asked = world.requests
+        return "the world was asked \(asked.count) times, the chain answered "
+            + "\(world.rpcAnswered("eth_call")) eth_call, \(world.rpcAnswered("debug_traceCall")) debug_traceCall, "
+            + "\(world.rpcAnswered("eth_simulateV1")) eth_simulateV1; mailbox \(world.mailbox.count); "
+            + "last asked: \(asked.suffix(30).joined(separator: ", "))"
+    }
+
     func testCreateATwoOfThreeAndProposeASendAgainstALocalWorld() throws {
         let world = try XCTUnwrap(world)
         let app = try launch()
@@ -244,7 +256,7 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertTrue(world.mailbox.isEmpty, "something reached the mailbox before the review was confirmed")
         shot(app, "hermetic-draft-review")
         tap(app, "multisig.draft.propose")
-        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world))")
         shot(app, "hermetic-proposed")
 
         // The mailbox has it: 0.5 xDAI to Three, from the multisig, at its
@@ -306,7 +318,7 @@ final class MultisigHermeticUITests: XCTestCase {
         assertReviewChecked(app, world)
         XCTAssertTrue(world.mailbox.isEmpty)
         tap(app, "multisig.draft.propose")
-        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world))")
         XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
         shot(app, "swipe-review-proposed")
     }
@@ -356,7 +368,7 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertTrue(world.mailbox.isEmpty, "the hold alone sent something: \(world.mailbox)")
         shot(app, "unchecked-anyway-step")
         confirm.tap()
-        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "confirmed, the proposal sheet never opened")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "confirmed, the proposal sheet never opened; \(trail(world))")
         XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
         XCTAssertEqual((world.mailbox.first?["safe"] as? String)?.lowercased(), address.lowercased())
         shot(app, "unchecked-proposed")
