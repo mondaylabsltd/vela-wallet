@@ -695,6 +695,71 @@ fn truncate_utf16(s: &str, max: usize) -> &str {
     s
 }
 
+/// Letters Unicode 17 gives no lowercase and std's tables (Unicode 18 since
+/// Rust 1.100) do. [`normalize_seed`] leaves them as they are.
+///
+/// Every avatar drawn so far lowercased its seed as Unicode 17 does: the
+/// app's original `seed.toLowerCase()` (V8 in Node 22.22.3 reports Unicode
+/// 17.0, and `scripts/verify-identicon-parity.mjs` checks the core against
+/// it), and this function on Rust 1.97.1, whose std is Unicode 17.0. A seed's
+/// avatar must not change because the compiler's Unicode tables did, so the
+/// contract is Unicode 17's lowercasing, frozen.
+///
+/// The list is the UCD's own difference: UnicodeData.txt field 13 and the
+/// unconditional SpecialCasing.txt mappings, 17.0.0 against 18.0.0, give
+/// exactly these 20; diffing `char::to_lowercase` over every code point
+/// between 1.97.1 and 1.100.0 gives the same 20.
+/// `lowercase_map_is_unicode_17s` fails when a toolchain moves std again.
+///
+/// Not frozen: whether a `Σ` is word-final (`ς`) looks at its neighbours'
+/// Cased and Case_Ignorable properties, and letters Unicode 18 assigned are
+/// cased in std now. A `Σ` followed by one of them lowercases to `σ` where
+/// V8 gives `ς`.
+const NO_LOWERCASE_IN_UNICODE_17: [char; 20] = [
+    '\u{A7DD}',
+    '\u{A7E2}',
+    '\u{AB6C}',
+    '\u{AB6D}',
+    '\u{1DF40}',
+    '\u{1DF48}',
+    '\u{1DF4A}',
+    '\u{1DF4D}',
+    '\u{1DF51}',
+    '\u{1DF68}',
+    '\u{1DF6A}',
+    '\u{1DF6C}',
+    '\u{1DF6E}',
+    '\u{1DF72}',
+    '\u{1DF74}',
+    '\u{1DF76}',
+    '\u{1DF78}',
+    '\u{1DF7A}',
+    '\u{1DF7C}',
+    '\u{1DF7E}',
+];
+
+/// `str::to_lowercase`, which applies the final-sigma rule (V8 does too, so
+/// it is not done char by char), with [`NO_LOWERCASE_IN_UNICODE_17`] left as
+/// they are. Unicode 17 assigns none of them, so to its final-sigma rule each
+/// is neither cased nor case-ignorable, a word boundary: lowercasing the text
+/// between them separately is that rule exactly.
+fn lowercase_unicode_17(seed: &str) -> String {
+    if !seed.contains(&NO_LOWERCASE_IN_UNICODE_17[..]) {
+        return seed.to_lowercase();
+    }
+    let mut out = String::with_capacity(seed.len());
+    for piece in seed.split_inclusive(&NO_LOWERCASE_IN_UNICODE_17[..]) {
+        match piece.char_indices().next_back() {
+            Some((at, kept)) if NO_LOWERCASE_IN_UNICODE_17.contains(&kept) => {
+                out.push_str(&piece[..at].to_lowercase());
+                out.push(kept);
+            }
+            _ => out.push_str(&piece.to_lowercase()),
+        }
+    }
+    out
+}
+
 /// Case- and length-normalises a seed so all four platforms agree.
 ///
 /// Equivalent to the app's long-standing `seed.toLowerCase().slice(0, 128)` —
@@ -709,6 +774,9 @@ fn truncate_utf16(s: &str, max: usize) -> &str {
 ///
 /// Every platform must route through this. Lowercasing at the call site is exactly
 /// how four platforms drift into drawing four different avatars.
+///
+/// The lowercasing is Unicode 17's, whatever the compiler's: see
+/// [`NO_LOWERCASE_IN_UNICODE_17`].
 #[must_use]
 pub fn normalize_seed(seed: &str) -> Cow<'_, str> {
     // Fast path: ASCII lowercasing is 1:1 on length, so truncation can be checked
@@ -720,7 +788,7 @@ pub fn normalize_seed(seed: &str) -> Cow<'_, str> {
         }
         return Cow::Owned(truncated.to_ascii_lowercase());
     }
-    let lowered = seed.to_lowercase();
+    let lowered = lowercase_unicode_17(seed);
     let truncated = truncate_utf16(&lowered, SEED_MAX_UTF16_LEN);
     if truncated.len() == lowered.len() {
         Cow::Owned(lowered)
@@ -867,6 +935,68 @@ pub fn create_identicon(raw_seed: &str, options: CreateOptions) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Seeds lowercase as Unicode 17 (and V8 in Node 22.22.3) lowercase them,
+    /// whatever std's tables say. Expected values are Node 22.22.3's
+    /// `toLowerCase()`.
+    #[test]
+    fn seeds_lowercase_as_unicode_17() {
+        for &kept in &NO_LOWERCASE_IN_UNICODE_17 {
+            assert_ne!(
+                kept.to_lowercase().to_string(),
+                kept.to_string(),
+                "{kept:?} has a std lowercase"
+            );
+            assert_eq!(normalize_seed(&kept.to_string()), kept.to_string());
+        }
+        assert_eq!(normalize_seed("A\u{3a3}\u{A7DD}"), "a\u{3c2}\u{A7DD}");
+        assert_eq!(
+            normalize_seed("\u{A7DD}\u{391}\u{3a3}"),
+            "\u{A7DD}\u{3b1}\u{3c2}"
+        );
+        assert_eq!(
+            normalize_seed("\u{C0}B\u{1DF4D}C\u{3a3}"),
+            "\u{e0}b\u{1DF4D}c\u{3c2}"
+        );
+        assert_eq!(normalize_seed("\u{C0}B\u{3a3}"), "\u{e0}b\u{3c2}");
+    }
+
+    /// The lowercase of every `char`, as [`normalize_seed`] sees it (std's
+    /// `char::to_lowercase`, [`NO_LOWERCASE_IN_UNICODE_17`] kept), is Unicode
+    /// 17's: FNV-1a 64 over every code point and its lowercase equals the
+    /// digest of 1.97.1's raw std (Unicode 17.0), `0xc8aa_d735_7475_6d8c`.
+    /// On 1.100.0's raw std it is `0x48ba_2236_e0fd_3566`; the 20 kept are the
+    /// whole difference.
+    #[test]
+    fn lowercase_map_is_unicode_17s() {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut feed = |value: u32| {
+            for byte in value.to_le_bytes() {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        };
+        for ch in (0..=0x10_FFFF_u32).filter_map(char::from_u32) {
+            feed(u32::from(ch));
+            if NO_LOWERCASE_IN_UNICODE_17.contains(&ch) {
+                feed(u32::from(ch));
+            } else {
+                ch.to_lowercase().for_each(|lower| feed(u32::from(lower)));
+            }
+            feed(u32::MAX);
+        }
+        assert_eq!(
+            hash,
+            0xc8aa_d735_7475_6d8c,
+            "std's lowercase map (Unicode {:?}) is no longer Unicode 17's once \
+             NO_LOWERCASE_IN_UNICODE_17 is kept: the toolchain moved std's Unicode \
+             tables. Diff `char::to_lowercase` over every code point (or the UCD's \
+             UnicodeData.txt field 13 + SpecialCasing.txt, 17.0.0 against std's \
+             version) and add every code point that gained or changed a lowercase \
+             to NO_LOWERCASE_IN_UNICODE_17, or seeds' avatars change.",
+            char::UNICODE_VERSION
+        );
+    }
 
     /// The load-bearing invariant behind [`CHAOS_TABLE`]: const-eval and runtime
     /// float evaluation must agree bit-for-bit (research D4).
