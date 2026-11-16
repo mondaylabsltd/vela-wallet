@@ -51,11 +51,17 @@ if [[ -n "$private_imports" ]]; then
 fi
 
 # 2. Private selectors. grep -c, not grep -q: under pipefail -q exits early
-#    and the writer dies of SIGPIPE, which reads as a failure.
+#    and the writer dies of SIGPIPE, which reads as a failure. `_zoomFill:`
+#    and `_windowRestorationOptions` (with the undocumented class
+#    `NSWindowRestorationOptions` it returns) arrived upstream between the
+#    first vendored commit and Zed v1.28.1.
 for selector in \
   _windowResizeNorthWestSouthEastCursor \
   _windowResizeNorthEastSouthWestCursor \
-  _opaqueRectForWindowMoveWhenInTitlebar; do
+  _opaqueRectForWindowMoveWhenInTitlebar \
+  _zoomFill: \
+  _windowRestorationOptions \
+  NSWindowRestorationOptions; do
   if [[ "$(LC_ALL=C grep -a -c -- "$selector" "$binary" || true)" != 0 ]]; then
     fail "private selector present: $selector"
   fi

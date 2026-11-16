@@ -1151,7 +1151,7 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
   It covers four areas:
   - *advisories*: vulnerabilities, unmaintained, unsound and yanked crates all fail;
   - *licences*: an explicit allow-list;
-  - *sources*: crates.io only, plus four named git repositories, each pinned to a commit
+  - *sources*: crates.io only, plus six named git repositories, each pinned to a commit
     (`required-git-spec = "rev"`; unknown git is denied);
   - *bans*: openssl and native-tls are banned outside the one place they already are.
 
@@ -1181,6 +1181,14 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
   `vendor/gpui_macos`'s four zed dependencies (otherwise Cargo sees two sources and a second
   gpui). `dotlottie-rs` moved from a tag to the tag's commit. Nothing that is built changed:
   the same 21 packages at the same commit, and `cargo check --locked` passes both ways.
+  **Moved** after 0.9.11 to Zed v1.28.1, `e8bc16acee5ae1937600d571d441c4b5d7b0d288` (G6): the
+  same gpui as the Zed release, as the owner chose — a commit Zed shipped, rather than the
+  smallest move past the Apache-2.0 relicense. The zed revs are now eight (`gpui`,
+  `gpui_platform` and the test `gpui` in the app; `gpui`, `gpui_apple`, `collections`,
+  `gpui_util`, `scheduler` in `vendor/gpui_macos`), the vendored crate was refreshed from that
+  commit with the spec 095 edits re-applied, and gpui's own pins brought three git sources
+  into `deny.toml` (wgpu's repository for the Linux renderer, Zed's `oo7` and
+  `wasm_thread` forks).
 - **PeerConnect, rebuilt from source.** `VENDOR.json` records the repository, commit,
   toolchain (rustc 1.97.1), wasm-bindgen (0.2.129), the recipe, the local patch and every
   file's sha256. `scripts/check-peerconnect-vendor.mjs` checks it in two ways:
@@ -1202,8 +1210,8 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
 | zip 2.4.2 (0367/0368/0369/0429) | desktop: came in with dotlottie-rs | **gone** with dotlottie-rs (2026-11-14, the launch animation is drawn by gpui); the allowlist entries are removed |
 | lru 0.12.5 unsound (0002/0253) | desktop: came in with rqrr 0.9 (QR decode) | **gone** with rqrr (2026-11-14, the desktop reads QR codes with `rust/vela-qr`, which has no dependencies); the allowlist entries are removed |
 | glib 0.18.5 unsound (0429) | in no shipped build (`cargo tree --target` is empty for every target); cargo-deny joins cfg edges across targets | allowlisted |
-| unmaintained: paste, proc-macro-error(2), basic-toml (compile time only); bincode 1.3.3 (crux_core, our bytes only); rustls-pemfile (OS cert files); rustybuzz/ttf-parser (system fonts); zvariant/zbus (session bus) | both | allowlisted, each with its exit in `deny.toml` |
-| **GPL-3.0-or-later `zlog`, `ztracing`, `ztracing_macro`** | desktop: linked by gpui at the pinned commit (gpui → sum_tree → ztracing → zlog) | **open, a release blocker for the desktop (owner, below).** A version-pinned exception keeps the gate green only because the fix is known: Zed relicensed all three to Apache-2.0 in zed#63573 (`ac5af8b9`, 2026-09-01). Exit: move the gpui pin to `ac5af8b9` or later |
+| unmaintained: paste, proc-macro-error (proc-macro-error2 left with the Zed v1.28.1 pin), basic-toml (compile time only); bincode 1.3.3 (crux_core, our bytes only); rustls-pemfile (OS cert files); rustybuzz/ttf-parser (system fonts); zvariant/zbus (session bus) | both | allowlisted, each with its exit in `deny.toml` |
+| **GPL-3.0-or-later `zlog`, `ztracing`, `ztracing_macro`** | desktop: linked by gpui at the old pin (gpui → sum_tree → ztracing → zlog) | **closed** (G6): accepted for 0.9.11 only, then the gpui pin moved to Zed v1.28.1 (`e8bc16ac…`), past the Apache-2.0 relicense in zed#63573 (`ac5af8b9`). `zlog` left the graph and `ztracing` / `ztracing_macro` are Apache-2.0; the three exceptions are removed |
 | MPL-2.0 (uniffi ×8, cbindgen, cssparser, selectors, dtoa-short, dwrote, option-ext) | both | allowed per crate. File-level copyleft, and these files are not modified |
 | npm: @sveltejs/kit 2.70.1, devalue 5.8.2 (bundled into the wallet's pages) | web wallet | **fixed**, kit 2.70.4, devalue 5.9.4 |
 | npm: undici 7.28 and sharp 0.35 (7 + 2 high), vite 8.1.5 (high), vitest, minimatch, cookie (dev only) | web wallet dev tree: wrangler's local simulator, the dev server, tests | reported; Dependabot. None ships, and none is critical, so the whole-tree gate at `critical` passes |
@@ -1514,9 +1522,9 @@ DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it
    a red job does not stop a merge. This repository cannot show which checks are required.
 3. **Turn on Dependabot alerts and security updates** (Settings → Code security). The file
    alone only schedules version updates.
-4. **Desktop release blocker:** move the gpui pin to zed `ac5af8b9` or later (the GPL-3.0
-   crates relicensed to Apache-2.0), refresh `vendor/gpui_macos`, and delete the three
-   exceptions in `deny.toml`. Or explicitly accept the licence risk for one release.
+4. **Done (G6).** The licence risk was accepted for 0.9.11 only; the gpui pin then moved to
+   Zed v1.28.1 (`e8bc16ac…`, past the relicense `ac5af8b9`), `vendor/gpui_macos` was refreshed
+   and the three exceptions in `deny.toml` were deleted.
 5. **getvela.app's Worker**: bump kit, svelte and devalue (bun audit, in range).
 6. **Decide on the page-scoped RP ID** (above).
 7. **Read the first `web-core-reproducible` run.** If the Linux container's bytes differ from

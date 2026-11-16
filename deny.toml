@@ -86,7 +86,6 @@ ignore = [
   # attacker input. Removed when the parent drops them.
   { id = "RUSTSEC-2024-0436", reason = "paste (archived): proc-macro used by alloy-primitives / syn-solidity at compile time only. Exit: alloy moving off it." },
   { id = "RUSTSEC-2024-0370", reason = "proc-macro-error 1.x: proc-macro of crux_macros 0.10 at compile time only. Exit: a crux_core release off it." },
-  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 (desktop): proc-macro of stacksafe-macro under gpui, compile time only. Exit: the next gpui pin." },
   { id = "RUSTSEC-2026-0374", reason = "basic-toml (archived, rust/ only): askama_derive under uniffi_bindgen, reading this repo's own templates/config at build time. Exit: a uniffi release whose askama uses `toml`." },
 
   # ---- Unmaintained, runtime, no maintained drop-in today --------------------
@@ -152,25 +151,6 @@ exceptions = [
   { crate = "dtoa-short", allow = ["MPL-2.0"] },
   { crate = "dwrote", allow = ["MPL-2.0"] },                  # desktop Windows: DirectWrite via zed's font-kit
   { crate = "option-ext", allow = ["MPL-2.0"] },              # dirs -> dirs-sys
-
-  # --- GPL-3.0-or-later: STRONG copyleft — a flagged, OPEN licence risk ------
-  # zlog, ztracing and ztracing_macro are Zed crates gpui depends on
-  # (gpui -> sum_tree -> ztracing -> zlog), declared GPL-3.0-or-later at the
-  # pinned rev c97b7c0e. zlog and ztracing are LINKED into the desktop
-  # binary. GPLv3 code in it does not fit shipping the app under MIT alone,
-  # nor the Mac App Store's terms. Zed, the copyright holder, relicensed all
-  # three to Apache-2.0 in zed-industries/zed#63573 (commit ac5af8b9,
-  # 2026-09-01: "these crates have to be non-copyleft for GPUI to ship as a
-  # permissively licensed project"); ztracing_macro's source is byte-identical
-  # between our pin and that commit, zlog and ztracing differ in one file
-  # each. This exception keeps the gate green ONLY because the fix is known:
-  # EXIT = move the gpui pin to a commit at or after ac5af8b9 (refreshing
-  # app-desktop/vendor/gpui_macos with it), then delete these three lines.
-  # Until then no desktop release ships without the owner accepting this.
-  # Version-pinned so any other copy of them fails.
-  { crate = "zlog@0.1.0", allow = ["GPL-3.0-or-later"] },
-  { crate = "ztracing@0.1.0", allow = ["GPL-3.0-or-later"] },
-  { crate = "ztracing_macro@0.1.0", allow = ["GPL-3.0-or-later"] },
 ]
 
 # Our own crates carry no `license` field; the repository's LICENSE (MIT)
@@ -261,4 +241,20 @@ allow-git = [
   # Zed's forks that gpui itself pins by rev (font loading, Linux XIM input).
   "https://github.com/zed-industries/font-kit",
   "https://github.com/zed-industries/xim-rs",
+  # Added with the Zed v1.28.1 pin, each pinned by rev in Zed's root
+  # Cargo.toml at that commit (a git dependency's own revs are not ours to
+  # move; they change only with the gpui pin):
+  # - wgpu/naga 30 from wgpu's own repository — gpui_wgpu, the LINUX
+  #   renderer (`cargo tree -i wgpu` is empty for macOS and Windows).
+  #   Replaces wgpu 29.0.4 from crates.io.
+  # - Zed's fork of oo7, the Secret Service client gpui_linux carries for
+  #   its credentials API (Linux only; the wallet never calls it — its
+  #   secrets are passkeys, not a keyring entry). Replaces oo7 0.6 from
+  #   crates.io.
+  # - Zed's fork of wasm_thread, web workers for gpui_web: wasm32 only, in no
+  #   desktop build; listed because [graph] unions the core's wasm target
+  #   (the KNOWN LIMIT above).
+  "https://github.com/gfx-rs/wgpu",
+  "https://github.com/zed-industries/oo7",
+  "https://github.com/zed-industries/wasm_thread",
 ]
