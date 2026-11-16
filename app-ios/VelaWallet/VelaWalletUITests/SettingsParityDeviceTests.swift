@@ -117,7 +117,7 @@ final class SettingsParityDeviceTests: XCTestCase {
 
         XCTAssertTrue(app.buttons["创建钱包"].waitForExistence(timeout: 15)
                       || app.staticTexts["创建钱包"].waitForExistence(timeout: 1),
-                      "the erase did not return to the first run")
+                      "the erase did not return to the first run; \(onScreen(app))")
         settle(1.5)
         attach(app.screenshot(), named: "parity-erase-first-run")
         XCTAssertFalse(app.staticTexts["退出登录"].exists, "a sign-out sheet followed the erase")
@@ -202,6 +202,18 @@ final class SettingsParityDeviceTests: XCTestCase {
         }
         label.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         settle(1.0)
+    }
+
+    /// What the screen says, for a failure message. The erase has failed on
+    /// CI now and then, and the message must say which way: the sheet still
+    /// up (the tap missed), the erase's own "清理未完成" with the keys that
+    /// survived it (spec 081 FR-017: the app says so and stays signed in), or
+    /// somewhere else entirely.
+    private func onScreen(_ app: XCUIApplication) -> String {
+        let incomplete = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "清理未完成")).firstMatch.exists
+        let texts = app.staticTexts.allElementsBoundByIndex.prefix(40).map(\.label).filter { !$0.isEmpty }
+        return "erase incomplete said: \(incomplete); confirm still there: \(app.buttons["全部清除"].exists); "
+            + "on screen: \(texts.joined(separator: " | "))"
     }
 
     private func element(labelled text: String, in app: XCUIApplication) -> XCUIElement {

@@ -11,6 +11,7 @@
   <h1>Vela test dApp</h1>
   <p>Spec 053's device harness. Every action prints a <code>#verdict</code> line, because XCUITest reads a WKWebView's RENDERED text and cannot see JavaScript state that was never painted.</p>
   <pre id="last">#verdict boot waiting</pre>
+  <pre id="asked">#asked nothing</pre>
   <pre id="verdicts">#verdict boot waiting</pre>
   <button id="connect" type="button">Connect</button>
   <button id="chain" type="button">Chain</button>
@@ -163,6 +164,9 @@ const keccak256 = (() => {
     const MAX = 'f'.repeat(64);
     const me = () => (state.results.eth_requestAccounts && state.results.eth_requestAccounts.result || [])[0] || window.ethereum.selectedAddress;
     window.__ask = async (method, params) => {
+      // Painted before the wallet is asked, on its own line (#last is the
+      // answers'): a read that is never answered then says it was asked.
+      document.getElementById('asked').textContent = '#asked ' + method;
       try {
         const result = await window.ethereum.request({ method, params: params ?? [] });
         state.results[method] = { ok: true, result };

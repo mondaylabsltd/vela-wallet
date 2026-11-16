@@ -188,9 +188,13 @@ final class TextScaleSliderDeviceTests: XCTestCase {
             settle(0.8)
         }
         let frame = slider.frame
+        let hittable = slider.isHittable
         XCTAssertTrue(
-            slider.isHittable && frame.minY >= screen * 0.25 && frame.maxY <= screen * 0.75,
-            "the text-size slider could not be scrolled into reach (\(frame))"
+            hittable && frame.minY >= screen * 0.25 && frame.maxY <= screen * 0.75,
+            // Which half failed, and the size it was at: a retry that finds a
+            // size the failed attempt left behind lays the page out otherwise.
+            "the text-size slider could not be scrolled into reach (\(frame); hittable \(hittable); "
+                + "screen \(screen); size \(slider.value as? String ?? "?"); swipes \(swipes))"
         )
     }
 
