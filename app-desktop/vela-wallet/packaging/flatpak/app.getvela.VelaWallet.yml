@@ -16,8 +16,9 @@
 id: app.getvela.VelaWallet
 runtime: org.freedesktop.Platform
 # 25.08, not the older 24.08, for one concrete reason: the crate is
-# `edition = "2024"` and needs rustc 1.97.1 or newer, and the rust-stable SDK
-# extension only tracks whatever its branch shipped with. The newer branch is
+# `edition = "2024"` and needs a recent rustc (the repository pins 1.100.0; the
+# extension here was 1.98.1 on 2026-11-16), and the rust-stable SDK extension
+# only tracks whatever its branch shipped with. The newer branch is
 # the one likely to satisfy that. It is also what org.flatpak.Builder itself
 # pulls in, so a local build reuses the SDK already on disk instead of
 # downloading a second one.
@@ -79,8 +80,8 @@ modules:
         - --share=network
     build-commands:
       # Printed so a toolchain mismatch is obvious in the log rather than
-      # showing up as a wall of edition2024 parse errors. The crate needs
-      # rustc 1.97.1 or newer.
+      # showing up as a wall of edition2024 parse errors. This is the SDK's
+      # compiler, not the one rust/rust-toolchain.toml pins.
       - rustc --version && cargo --version
 
       - cd app-desktop/vela-wallet && cargo build --release --locked
