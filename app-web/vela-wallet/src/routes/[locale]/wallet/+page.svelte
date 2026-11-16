@@ -71,6 +71,7 @@
 	import { validatePayQuery } from '#lib/flows/core/payment-request.ts';
 	import { payPrefill } from '#lib/pay/link.ts';
 	import { takeKeptPay } from '#lib/pay/kept.ts';
+	import { takeConnectReturn } from '#lib/connect/channel.ts';
 	import { preferences } from '#lib/services/preferences.svelte.ts';
 	import {
 		accountLivesOn,
@@ -2338,6 +2339,21 @@
 	 * scanned code does; Send rules on what this wallet can do with it, and
 	 * the person reviews and confirms before anything is signed.
 	 */
+	/**
+	 * Vela Connect (spec 109): this window left a site's request to create a
+	 * wallet or sign in (`/dapp` → Welcome → here). Now that there is a
+	 * wallet, the window goes back to the request — the site sends what is
+	 * still unanswered when it hears `ready` again.
+	 */
+	let connectTaken = false;
+	$effect(() => {
+		if (connectTaken || !identity) return;
+		connectTaken = true;
+		if (takeConnectReturn()) {
+			void goto(resolve('/[locale]/dapp', { locale: data.locale }), { replace: true });
+		}
+	});
+
 	let payTaken = false;
 	$effect(() => {
 		if (payTaken || !identity) return;

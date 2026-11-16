@@ -1217,6 +1217,22 @@
    "openInPanelTitle": "Vela ist in der Seitenleiste geöffnet",
    "openInPanelBody": "Eine Wallet pro Fenster: Dieser Tab tritt zurück, solange die Seitenleiste verwendet wird. Hier bleibt alles, wie Sie es verlassen haben.",
    "goToPanel": "Zur Seitenleiste"
+  },
+  "velaConnect": {
+   "doneTitle": "Zurück zu {{host}}",
+   "doneBody": "Vela hat {{host}} geantwortet. Du kannst dieses Fenster schließen und dort weitermachen.",
+   "close": "Fenster schließen",
+   "goneTitle": "{{host}} ist nicht mehr geöffnet",
+   "goneBody": "In diesem Fenster wird nichts mehr angefragt. Was du schon bestätigt hast, steht in deinen Aktivitäten.",
+   "directTitle": "Nichts zu bestätigen",
+   "directBody": "Apps, die mit Vela arbeiten, öffnen dieses Fenster, wenn sie dich um etwas bitten. Um deine Wallet zu nutzen, öffne Vela.",
+   "openWallet": "Vela öffnen",
+   "badLinkTitle": "Dieser Link funktioniert nicht",
+   "badLinkBody": "Er ist unvollständig oder keine Anfrage, die Vela versteht. Nichts wurde geteilt oder signiert.",
+   "unverifiedTitle": "Über einen Link geöffnet",
+   "unverifiedBody": "Vela kann nicht bestätigen, dass {{host}} dich hierher geschickt hat. Was du bestätigst, geht nur an {{host}} zurück – fahre also nur fort, wenn du von dort kommst.",
+   "continueLabel": "Weiter",
+   "returning": "Zurück zu {{host}}…"
   }
  },
  "signHandoff": {

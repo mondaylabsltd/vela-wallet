@@ -140,6 +140,22 @@
       "openInPanelTitle": "Vela is open in the side panel",
       "openInPanelBody": "One wallet per window: this tab steps aside while the side panel is in use. Everything here stays as you left it.",
       "goToPanel": "Go to side panel"
+    },
+    "velaConnect": {
+      "doneTitle": "Back to {{host}}",
+      "doneBody": "Vela has answered {{host}}. You can close this window and carry on there.",
+      "close": "Close window",
+      "goneTitle": "{{host}} is no longer open",
+      "goneBody": "Nothing more will be asked in this window. Anything you already approved is in your activity.",
+      "directTitle": "Nothing to approve",
+      "directBody": "Apps that work with Vela open this window when they ask you for something. To use your wallet, open it instead.",
+      "openWallet": "Open Vela",
+      "badLinkTitle": "This link can’t be used",
+      "badLinkBody": "It is incomplete, or it isn’t a request Vela understands. Nothing was shared or signed.",
+      "unverifiedTitle": "Opened from a link",
+      "unverifiedBody": "Vela can’t confirm that {{host}} sent you here. Whatever you approve goes back only to {{host}}, so continue only if you came from there.",
+      "continueLabel": "Continue",
+      "returning": "Returning to {{host}}…"
     }
   },
   "signHandoff": {

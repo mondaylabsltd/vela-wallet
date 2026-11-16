@@ -13,6 +13,7 @@
  * Nothing is decided here; the pool's ban and latency state stays where it is
  * (core state, on the wallet's side of the boundary).
  */
+import { dappArea } from '../area';
 import {
 	DEFAULT_NETWORKS,
 	ensureShownNetworks,
@@ -168,9 +169,7 @@ interface StorageAreaLike {
 }
 
 function area(): StorageAreaLike | null {
-	const local = (globalThis as { chrome?: { storage?: { local?: unknown } } }).chrome?.storage
-		?.local;
-	return (local as StorageAreaLike | undefined) ?? null;
+	return dappArea() as StorageAreaLike | null;
 }
 
 /** What this document last stored, without its timestamp: the same table is not stored twice. */

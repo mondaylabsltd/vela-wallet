@@ -16,6 +16,7 @@
  * one piece of wallet state the worker may see, and it is a fact the core
  * authored — never a decision the worker makes.
  */
+import { dappArea } from './area';
 import { siteStartChainFor } from '#lib/core/kernels.ts';
 import {
 	ACCOUNT_CHAINS_KEY,
@@ -46,9 +47,7 @@ interface StorageAreaLike {
 }
 
 function area(): StorageAreaLike | null {
-	const local = (globalThis as { chrome?: { storage?: { local?: unknown } } }).chrome?.storage
-		?.local;
-	return (local as StorageAreaLike | undefined) ?? null;
+	return dappArea() as StorageAreaLike | null;
 }
 
 export async function getGrant(origin: string): Promise<DAppGrant | null> {

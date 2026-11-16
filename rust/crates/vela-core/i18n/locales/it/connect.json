@@ -140,6 +140,22 @@
       "openInPanelTitle": "Vela è aperto nel pannello laterale",
       "openInPanelBody": "Un wallet per finestra: questa scheda si fa da parte mentre usi il pannello laterale. Qui tutto resta come l'hai lasciato.",
       "goToPanel": "Vai al pannello laterale"
+    },
+    "velaConnect": {
+      "doneTitle": "Torna a {{host}}",
+      "doneBody": "Vela ha risposto a {{host}}. Puoi chiudere questa finestra e continuare lì.",
+      "close": "Chiudi finestra",
+      "goneTitle": "{{host}} non è più aperto",
+      "goneBody": "In questa finestra non verrà chiesto altro. Ciò che hai già approvato è nella tua attività.",
+      "directTitle": "Niente da approvare",
+      "directBody": "Le app che funzionano con Vela aprono questa finestra quando ti chiedono qualcosa. Per usare il tuo wallet, apri Vela.",
+      "openWallet": "Apri Vela",
+      "badLinkTitle": "Questo link non si può usare",
+      "badLinkBody": "È incompleto, oppure non è una richiesta che Vela comprende. Nulla è stato condiviso o firmato.",
+      "unverifiedTitle": "Aperto da un link",
+      "unverifiedBody": "Vela non può confermare che sia stato {{host}} a mandarti qui. Ciò che approvi torna solo a {{host}}: continua solo se arrivi da lì.",
+      "continueLabel": "Continua",
+      "returning": "Ritorno a {{host}}…"
     }
   },
   "signHandoff": {

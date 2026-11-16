@@ -140,6 +140,22 @@
       "openInPanelTitle": "Vela đang mở trong bảng bên",
       "openInPanelBody": "Mỗi cửa sổ một ví: thẻ này tạm lui khi bạn đang dùng bảng bên. Mọi thứ ở đây vẫn giữ nguyên như bạn để lại.",
       "goToPanel": "Đến bảng bên"
+    },
+    "velaConnect": {
+      "doneTitle": "Quay lại {{host}}",
+      "doneBody": "Vela đã trả lời {{host}}. Bạn có thể đóng cửa sổ này và tiếp tục ở đó.",
+      "close": "Đóng cửa sổ",
+      "goneTitle": "{{host}} không còn mở",
+      "goneBody": "Cửa sổ này sẽ không hỏi thêm gì nữa. Những gì bạn đã chấp thuận có trong hoạt động của bạn.",
+      "directTitle": "Không có gì cần chấp thuận",
+      "directBody": "Các ứng dụng làm việc với Vela sẽ mở cửa sổ này khi cần bạn xác nhận. Để dùng ví, hãy mở Vela.",
+      "openWallet": "Mở Vela",
+      "badLinkTitle": "Không thể dùng liên kết này",
+      "badLinkBody": "Liên kết không đầy đủ hoặc không phải yêu cầu mà Vela hiểu. Không có gì được chia sẻ hay ký.",
+      "unverifiedTitle": "Mở từ một liên kết",
+      "unverifiedBody": "Vela không thể xác nhận {{host}} đã đưa bạn đến đây. Mọi thứ bạn chấp thuận chỉ được gửi về {{host}}, vì vậy chỉ tiếp tục nếu bạn đến từ đó.",
+      "continueLabel": "Tiếp tục",
+      "returning": "Đang quay lại {{host}}…"
     }
   },
   "signHandoff": {

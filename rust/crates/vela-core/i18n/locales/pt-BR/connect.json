@@ -140,6 +140,22 @@
       "openInPanelTitle": "A Vela está aberta no painel lateral",
       "openInPanelBody": "Uma carteira por janela: esta aba sai de cena enquanto o painel lateral estiver em uso. Tudo aqui fica como você deixou.",
       "goToPanel": "Ir para o painel lateral"
+    },
+    "velaConnect": {
+      "doneTitle": "Voltar para {{host}}",
+      "doneBody": "A Vela respondeu a {{host}}. Você pode fechar esta janela e continuar lá.",
+      "close": "Fechar janela",
+      "goneTitle": "{{host}} não está mais aberto",
+      "goneBody": "Nada mais será pedido nesta janela. O que você já aprovou está na sua atividade.",
+      "directTitle": "Nada para aprovar",
+      "directBody": "Apps que funcionam com a Vela abrem esta janela quando pedem algo a você. Para usar sua carteira, abra a Vela.",
+      "openWallet": "Abrir Vela",
+      "badLinkTitle": "Este link não pode ser usado",
+      "badLinkBody": "Ele está incompleto ou não é um pedido que a Vela entende. Nada foi compartilhado nem assinado.",
+      "unverifiedTitle": "Aberto por um link",
+      "unverifiedBody": "A Vela não consegue confirmar que {{host}} enviou você até aqui. O que você aprovar volta apenas para {{host}}, então continue só se veio de lá.",
+      "continueLabel": "Continuar",
+      "returning": "Voltando para {{host}}…"
     }
   },
   "signHandoff": {

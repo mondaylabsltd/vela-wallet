@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Vela Connect — example</title>
+		<style>
+			body {
+				font: 15px/1.5 system-ui, sans-serif;
+				max-width: 640px;
+				margin: 2rem auto;
+				padding: 0 1rem;
+				color: #111;
+			}
+			fieldset {
+				border: 1px solid #ddd;
+				border-radius: 8px;
+				margin: 0 0 1rem;
+			}
+			button {
+				margin: 0.25rem 0.25rem 0.25rem 0;
+				padding: 0.4rem 0.8rem;
+			}
+			input {
+				width: 100%;
+				box-sizing: border-box;
+				margin: 0.25rem 0;
+			}
+			pre {
+				background: #f5f5f5;
+				padding: 0.75rem;
+				border-radius: 8px;
+				white-space: pre-wrap;
+				word-break: break-all;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Vela Connect example</h1>
+		<p>
+			Every button below is one EIP-1193 request to the Vela web wallet, carried by
+			<code>vela-connect.js</code> (read it — it is the protocol, written out once). Add
+			<code>?wallet=http://localhost:5173</code> to use a local Vela.
+		</p>
+
+		<fieldset>
+			<legend>Popup</legend>
+			<button id="connect">Connect</button>
+			<button id="sign">Sign a message</button>
+			<button id="siwe">Sign in (SIWE)</button>
+			<label>Chain id <input id="chain" value="1" /></label>
+			<button id="switch">Switch chain</button>
+			<label>Pay to <input id="to" value="0x000000000000000000000000000000000000dEaD" /></label>
+			<label>Amount, wei <input id="value" value="1000000000000000" /></label>
+			<button id="send">Send (wallet_sendCalls)</button>
+			<button id="close">Close Vela</button>
+		</fieldset>
+
+		<fieldset>
+			<legend>Redirect (when a popup cannot open)</legend>
+			<button id="redirect-connect">Connect by redirect</button>
+		</fieldset>
+
+		<pre id="log" data-testid="log"></pre>
+
+		<script type="module">
+			import { VelaPopup, redirectToVela, takeVelaAnswer } from './vela-connect.js';
+
+			const wallet = new URLSearchParams(location.search).get('wallet') ?? undefined;
+			const vela = new VelaPopup({ wallet });
+			const $ = (id) => document.getElementById(id);
+			const results = [];
+			let account = null;
+
+			function log(label, value) {
+				const entry = { label, ...value };
+				results.push(entry);
+				$('log').textContent = results.map((r) => JSON.stringify(r)).join('\n');
+			}
+
+			/** Open Vela in the click (no await before it), then ask. */
+			function ask(label, method, params = []) {
+				if (!vela.open()) {
+					log(label, { blocked: true });
+					return Promise.resolve(null);
+				}
+				return vela
+					.request(method, params)
+					.then((result) => (log(label, { result }), result))
+					.catch((error) => (log(label, { code: error.code, message: error.message }), null));
+			}
+
+			$('connect').onclick = async () => {
+				const accounts = await ask('connect', 'eth_requestAccounts');
+				if (accounts) account = accounts[0];
+			};
+
+			$('sign').onclick = () =>
+				// personal_sign takes the message as hex; this is "Hello, Vela".
+				ask('sign', 'personal_sign', ['0x48656c6c6f2c2056656c61', account]);
+
+			$('siwe').onclick = () => {
+				// EIP-4361. The domain must be this site's host: Vela checks it.
+				const chainId = Number($('chain').value);
+				const message = [
+					`${location.host} wants you to sign in with your Ethereum account:`,
+					account,
+					'',
+					'Sign in to the Vela Connect example.',
+					'',
+					`URI: ${location.origin}`,
+					'Version: 1',
+					`Chain ID: ${chainId}`,
+					`Nonce: ${crypto.randomUUID().replaceAll('-', '')}`,
+					`Issued At: ${new Date().toISOString()}`
+				].join('\n');
+				return ask('siwe', 'personal_sign', [message, account]);
+			};
+
+			$('switch').onclick = () =>
+				ask('switch', 'wallet_switchEthereumChain', [
+					{ chainId: '0x' + Number($('chain').value).toString(16) }
+				]);
+
+			$('send').onclick = async () => {
+				const chainId = '0x' + Number($('chain').value).toString(16);
+				const sent = await ask('send', 'wallet_sendCalls', [
+					{
+						version: '2.0.0',
+						chainId,
+						from: account,
+						atomicRequired: true,
+						calls: [{ to: $('to').value, value: '0x' + BigInt($('value').value).toString(16), data: '0x' }]
+					}
+				]);
+				if (!sent) return;
+				// Follow it on the same, still open window until it is final (§5.4).
+				for (;;) {
+					const status = await vela.request('wallet_getCallsStatus', [sent.id]).catch((error) => {
+						log('status', { code: error.code, message: error.message });
+						return null;
+					});
+					if (!status) return;
+					if (status.status >= 200) {
+						log('status', { result: status });
+						return vela.close();
+					}
+					await new Promise((r) => setTimeout(r, 1000));
+				}
+			};
+
+			$('close').onclick = () => vela.close();
+
+			$('redirect-connect').onclick = () =>
+				redirectToVela({ method: 'eth_requestAccounts', wallet: wallet ?? undefined });
+
+			// Back from a redirect: the answer is in the fragment.
+			try {
+				const answer = takeVelaAnswer();
+				if (answer) {
+					log('redirect', answer);
+					account = answer.result?.[0] ?? account;
+				}
+			} catch (error) {
+				log('redirect', { code: error.code, message: error.message });
+			}
+
+			window.demo = { vela, results, get account() { return account; } };
+		</script>
+	</body>
+</html>
