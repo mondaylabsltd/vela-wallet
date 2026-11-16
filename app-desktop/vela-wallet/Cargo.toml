@@ -414,7 +414,7 @@ windows-core = "0.61.2"
 # The rest is `scheme_relay.rs` (spec 076): the named pipe a second process
 # hands a `velawallet://sign-result` to the running wallet over, and the one
 # call that brings that wallet's window back in front of the browser.
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
     "Win32_System_Time",
     "Win32_Foundation",
     # A menu over the page cuts a hole in the webview's window (spec 083 D2).
