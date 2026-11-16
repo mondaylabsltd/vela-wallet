@@ -90,7 +90,7 @@ vela-core = { path = "../../rust/crates/vela-core", features = [
 # would save a card with a code and no words on it — the failure nobody
 # notices until somebody has already shared one. Icons and identicons are
 # shapes and do not care either way.
-resvg = { version = "0.45", default-features = false, features = [
+resvg = { version = "0.46", default-features = false, features = [
     "text",
     "system-fonts",
 ] }
