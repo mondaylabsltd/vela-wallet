@@ -99,6 +99,16 @@ class ContactsNoteTest {
         val saved = host.settle { it.contacts.any { c -> c.note != null } }.contacts.single()
         assertEquals("Rent, every month\nShared flat", saved.note)
 
+        // The view says the note at once; the store write (`WriteContacts`) is the
+        // effect that follows it, answered on the shell's own time. A second book
+        // opened before it lands reads an empty store and settles on no contacts
+        // (seen as a 10 s timeout on loaded CI runners). Wait for the write.
+        runBlocking {
+            withTimeout(TIMEOUT_MS) {
+                while (store.values[KeyValueStore.Keys.CONTACTS]?.contains("Shared flat") != true) delay(10)
+            }
+        }
+
         // A second book over the same store reads it back.
         val again = host(store)
         again.send(ContactEvent.AccountSwitched(ME))
