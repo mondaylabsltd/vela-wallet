@@ -29,7 +29,6 @@ use vela_core::app::multisig_members::{
 };
 use vela_core::app::multisig_signers::{KindNote, MemberKind};
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::{FocusHandle, Stateful};
 use std::time::{Duration, Instant};
 

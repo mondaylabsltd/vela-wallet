@@ -32,9 +32,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gpui::{
-    ExternalPaths, ImageSource, InteractiveElement as _, StatefulInteractiveElement as _, img,
-};
+use gpui::{ExternalPaths, ImageSource, img};
 
 use super::*;
 use crate::executor::bug_report::{self, BugReportOutcome};

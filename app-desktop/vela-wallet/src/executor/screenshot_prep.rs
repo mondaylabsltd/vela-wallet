@@ -127,7 +127,12 @@ fn over_white(image: &DynamicImage) -> RgbImage {
     // A screenshot is RGBA with every pixel opaque, almost always: nothing
     // to lay over, and the codec crate's own conversion does it.
     let opaque = match image {
-        DynamicImage::ImageRgba8(rgba) => rgba.as_raw().chunks_exact(4).all(|px| px[3] == 255),
+        DynamicImage::ImageRgba8(rgba) => rgba
+            .as_raw()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|px| px[3] == 255),
         other => !other.color().has_alpha(),
     };
     if opaque {
@@ -291,7 +296,7 @@ pub fn pictures(jpeg: &[u8], side: u32) -> Option<Pictures> {
 fn render_image(image: DynamicImage) -> Option<Arc<RenderImage>> {
     let (width, height) = (image.width(), image.height());
     let mut data = image.into_rgba8().into_raw();
-    for px in data.chunks_exact_mut(4) {
+    for px in data.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
     }
     let frame = RgbaImage::from_raw(width, height, data)?;
