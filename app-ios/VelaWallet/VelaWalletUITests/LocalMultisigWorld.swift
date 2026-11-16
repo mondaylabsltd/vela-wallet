@@ -74,6 +74,10 @@ final class LocalMultisigWorld: @unchecked Sendable {
     private let chain: URL
     private var _checks = Checks.offered
     private(set) var port: UInt16 = 0
+    /// Why `start` said no, for the failure message: it has failed on a CI
+    /// shard's first test, and "never listened, or not prepared" did not say
+    /// which step it was.
+    private(set) var startFailure: String?
 
     /// Set before the app is launched against this world.
     var checks: Checks {
@@ -151,21 +155,39 @@ final class LocalMultisigWorld: @unchecked Sendable {
             self?.read(connection, Data())
         }
         listener.start(queue: queue)
-        _ = ready.wait(timeout: .now() + 5)
+        let started = Date()
+        let waited = ready.wait(timeout: .now() + 5)
         port = listener.port?.rawValue ?? 0
-        return port != 0 && prepareChain()
+        guard port != 0 else {
+            startFailure = "the listener had no port after \(Self.since(started)) (\(waited == .timedOut ? "timed out" : "failed"), state \(listener.state))"
+            return false
+        }
+        return prepareChain()
+    }
+
+    private static func since(_ start: Date) -> String {
+        String(format: "%.1f s", Date().timeIntervalSince(start))
     }
 
     /// A fresh chain: reset, the contracts in place, the accounts funded.
     private func prepareChain() -> Bool {
-        guard call("eth_chainId", []) as? String == "0x64" else { return false }
-        guard call("anvil_reset", []) != nil else { return false }
-        for (address, code) in codes {
-            guard call("anvil_setCode", [address, code]) != nil,
-                  (call("eth_getCode", [address, "latest"]) as? String)?.lowercased() == code.lowercased()
-            else { return false }
+        let started = Date()
+        func no(_ step: String) -> Bool {
+            startFailure = "the chain at \(chain) \(step) (\(Self.since(started)) into preparing it)"
+            return false
         }
-        return Self.parallelAccounts.allSatisfy(fund)
+        let chainId = call("eth_chainId", [])
+        guard chainId as? String == "0x64" else { return no("answered eth_chainId with \(String(describing: chainId))") }
+        guard call("anvil_reset", []) != nil else { return no("did not take anvil_reset") }
+        for (address, code) in codes {
+            guard call("anvil_setCode", [address, code]) != nil else { return no("did not take anvil_setCode for \(address)") }
+            guard (call("eth_getCode", [address, "latest"]) as? String)?.lowercased() == code.lowercased()
+            else { return no("does not hold the code set at \(address)") }
+        }
+        for account in Self.parallelAccounts where !fund(account) {
+            return no("did not fund \(account)")
+        }
+        return true
     }
 
     /// The test's faucet: `address` holds 100 xDAI, as the chain then says.

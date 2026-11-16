@@ -44,7 +44,7 @@ final class MultisigHermeticUITests: XCTestCase {
             "no chain: start one with app-ios/scripts/ui-anvil.sh and run with TEST_RUNNER_VELA_UI_ANVIL_URL (CI's ios job does)"
         )
         let world = try LocalMultisigWorld(chain: chain)
-        XCTAssertTrue(world.start(), "the local world never listened, or its chain (\(chain)) was not prepared")
+        XCTAssertTrue(world.start(), "the local world did not start: \(world.startFailure ?? "no reason recorded")")
         self.world = world
     }
 
