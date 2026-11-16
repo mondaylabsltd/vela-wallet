@@ -803,15 +803,57 @@ jobs:
             app-android/vela-wallet/app/build/test-results/testDebugUnitTest
           retention-days: 14
 
-  # The unit suite on every PR; the UI suite (16 XCUITests, ~10 min on a
-  # simulator) on every push to main and on a PR only when it carries the
-  # `ios-ui` label — as Android, whose PR job runs no instrumented tests at
-  # all. The suite used to run after the unit suite behind one build, and made
-  # this the job every PR waited ~35 minutes for. On its own runner when it
-  # runs (a public repository's macOS minutes are not billed). Neither leg is
-  # a required check.
+  # Whether the iOS UI suite has anything to test here. It is ~35 minutes of
+  # XCUITests, so a push to main runs it only when the push changes what the
+  # app is built from: app-ios/, the core (rust/), the catalogs it bundles
+  # (assets/i18n/) or this workflow. A site- or web-only push skips it (CI's
+  # iOS build bundles no web package). A PR runs it only with the `ios-ui`
+  # label; `gh workflow run ci.yml --ref <branch>` always runs it.
+  ios-ui-gate:
+    name: ios-ui gate
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      # History without file contents: enough for `git diff --name-only`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: .github
+      - id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'ios-ui') }}
+        run: |
+          run=true
+          case "$EVENT" in
+            pull_request) run="$LABELLED" ;;
+            push)
+              # A new branch, or a push whose base this clone cannot see:
+              # run, rather than guess.
+              if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+                changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+                if ! printf '%s\n' "$changed" | grep -qE '^(app-ios/|rust/|assets/i18n/|\.github/workflows/ci\.yml$)'; then
+                  run=false
+                  echo "nothing the iOS app is built from changed in $BEFORE..$GITHUB_SHA"
+                fi
+              fi ;;
+          esac
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
+
+  # The unit suite on every PR. The UI suite, when the gate above says so, in
+  # three shards on three runners: run one after another its ~45 tests took
+  # ~35 minutes and made this a ~50-minute job; a shard is ~11 minutes of
+  # tests behind the same ~10-minute build. As Android, whose PR job runs no
+  # instrumented tests at all. On their own runners (a public repository's
+  # macOS minutes are not billed; five run at once, and a main push now asks
+  # for five: rust-macos, unit and three shards). `ios (unit)` is a required
+  # check; the UI shards are not.
   ios:
-    name: ios (${{ matrix.suite }})
+    name: ios (${{ matrix.leg }})
+    needs: ios-ui-gate
     runs-on: macos-15
     strategy:
       fail-fast: false
@@ -819,14 +861,20 @@ jobs:
         # One unit leg. Its ~1260 tests run in about a minute here (13 s on a
         # laptop); the leg's time is the build, which a second machine would
         # only repeat. #457 tried two shards: under a minute saved, for a
-        # second of the five macOS runners a free organisation gets.
-        suite: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ios-ui')) && '["unit","ui"]' || '["unit"]') }}
+        # second of the five macOS runners a free organisation gets. The UI
+        # suite is the opposite case: its time is the tests.
+        leg: ${{ fromJSON(needs.ios-ui-gate.outputs.run == 'true' && '["unit","ui-1","ui-2","ui-3"]' || '["unit"]') }}
     env:
       # The simulator slice alone, built for build time (`ci-ios` profile): the
       # tests run on the simulator, and `release`'s LTO + size optimisation
       # were the longest step here. What ships still builds `release`
       # (ios-package.yml), so nothing that reaches a person changes.
       VELA_IOS_SIM_ONLY: '1'
+      # The UI shards, by test class, balanced on measured time (CI runs
+      # 43710099490 and 43780468502, ~11 minutes each). ui-3 runs every class
+      # not named here, so a new test class is never left out of all three.
+      UI_SHARD_1: MultisigHermeticUITests SelfCallRefusalUITests SplitRowTouchDeviceTests R10FixLiveUITests StackDepthUITests
+      UI_SHARD_2: NativeStrengthsP3UITests IssueFixesDeviceTests ExploreNavigationScreenTests ReceiveNetworkSwitchUITests NativeP4UITests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The image's DEFAULT Xcode is not the one this source compiles under.
@@ -951,7 +999,7 @@ jobs:
       # trace and simulation executed there. Required: those tests fail, not
       # skip, without it.
       - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
-        if: matrix.suite == 'ui'
+        if: startsWith(matrix.leg, 'ui')
         with:
           version: v1.5.1
       - name: Build and test
@@ -959,17 +1007,37 @@ jobs:
         env:
           PERF_TEST: VelaWalletTests/SendReceiptFollowsTrackerTests/theConfirmReachesThePromptOnAnInstantNetwork()
         run: |
-          # This leg's tests: the UI suite, or everything else.
-          if [ "${{ matrix.suite }}" = ui ]; then
-            TESTS=-only-testing:VelaWalletUITests
-            # An assignment, so a chain that did not start stops the step.
-            chain=$(../scripts/ui-anvil.sh)
-            eval "$chain"
-          else
-            # The wall-clock guard runs on its own, below: in the parallel
-            # suite it measured its neighbours (7 s once, against 4).
-            TESTS="-skip-testing:VelaWalletUITests -skip-testing:$PERF_TEST"
-          fi
+          # This leg's tests: a UI shard, or everything else.
+          case "${{ matrix.leg }}" in
+            ui-*)
+              # Every class a shard names must exist: -only-testing with a
+              # misspelt class selects nothing, and says nothing.
+              for c in $UI_SHARD_1 $UI_SHARD_2; do
+                grep -qE "class $c([^A-Za-z0-9_]|$)" VelaWalletUITests/*.swift \
+                  || { echo "::error::UI shard names $c, which no UI test file declares"; exit 1; }
+              done
+              case "${{ matrix.leg }}" in
+                ui-1) TESTS=$(for c in $UI_SHARD_1; do printf -- '-only-testing:VelaWalletUITests/%s ' "$c"; done) ;;
+                ui-2) TESTS=$(for c in $UI_SHARD_2; do printf -- '-only-testing:VelaWalletUITests/%s ' "$c"; done) ;;
+                ui-3) TESTS="-only-testing:VelaWalletUITests $(for c in $UI_SHARD_1 $UI_SHARD_2; do printf -- '-skip-testing:VelaWalletUITests/%s ' "$c"; done)" ;;
+              esac
+              # One retry for a failed UI test. On this shared VM a step can
+              # wait out its timeout because the simulator was slow, not
+              # because the app was wrong: which tests failed changed from
+              # run to run on unchanged code. A test that fails twice still
+              # fails the leg, and one that passes only on its retry is named
+              # below as a warning, so a flake is seen, not hidden.
+              TESTS="$TESTS -retry-tests-on-failure -test-iterations 2"
+              # An assignment, so a chain that did not start stops the step.
+              chain=$(../scripts/ui-anvil.sh)
+              eval "$chain"
+              ;;
+            *)
+              # The wall-clock guard runs on its own, below: in the parallel
+              # suite it measured its neighbours (7 s once, against 4).
+              TESTS="-skip-testing:VelaWalletUITests -skip-testing:$PERF_TEST"
+              ;;
+          esac
           # No index store: nothing here searches the code, and building one
           # costs compile time.
           set -o pipefail
@@ -982,13 +1050,27 @@ jobs:
             -scheme VelaWallet \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
-            -resultBundlePath "$RUNNER_TEMP/${{ matrix.suite }}.xcresult" \
+            -resultBundlePath "$RUNNER_TEMP/${{ matrix.leg }}.xcresult" \
             $TESTS \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
           # A filter that selects nothing passes green with zero tests. The
           # unit leg holds over a thousand; under a hundred is a broken filter.
-          if [ "${{ matrix.suite }}" = unit ]; then
+          if [ "${{ matrix.leg }}" != unit ]; then
+            ran=$(grep -oE 'Executed [0-9]+ tests?' "$RUNNER_TEMP/xcodebuild.log" | tail -1 | grep -oE '[0-9]+' || true)
+            echo "${{ matrix.leg }} ran ${ran:-0} UI tests"
+            if [ "${ran:-0}" -lt 1 ]; then
+              echo "::error::${{ matrix.leg }} ran no UI tests; its filter selected nothing."
+              exit 1
+            fi
+            # Passed only on the retry: name them.
+            grep -oE "Test Case '-\[[^]]+\]' (passed|failed)" "$RUNNER_TEMP/xcodebuild.log" \
+              | awk '{name=$3" "$4; if ($5=="failed") f[name]=1; else if (f[name]) print name}' \
+              | sort -u | while read -r t; do
+                  echo "::warning::flaky: $t failed, then passed on its retry"
+                done
+          fi
+          if [ "${{ matrix.leg }}" = unit ]; then
             ran=$(grep -oE 'Test run with [0-9]+ tests' "$RUNNER_TEMP/xcodebuild.log" | tail -1 | grep -oE '[0-9]+' || true)
             echo "unit ran ${ran:-0} tests"
             if [ "${ran:-0}" -lt 100 ]; then
@@ -1008,12 +1090,21 @@ jobs:
             grep -q 'Test run with 1 test' "$RUNNER_TEMP/perf.log" \
               || { echo "::error::the confirm → prompt guard did not run on its own"; exit 1; }
           fi
+      # A failed UI shard keeps its result bundle: the screenshot and element
+      # tree at each failure, which the log alone does not show.
+      - name: Keep the failed UI shard's results
+        if: failure() && startsWith(matrix.leg, 'ui')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-${{ matrix.leg }}-xcresult
+          path: ${{ runner.temp }}/${{ matrix.leg }}.xcresult
+          retention-days: 14
       # A count says the filter selected something; it does not say WHICH. The
       # suites that replay the core's shared vectors (docs/scenarios/
       # multisig.yaml, `vector_replays`) must each have run, every test in
       # them passed — not skipped by an `.enabled(if:)` somebody added.
       - name: The shared core vectors ran, none skipped
-        if: matrix.suite == 'unit'
+        if: matrix.leg == 'unit'
         run: |
           npm ci --prefix scripts --no-audit --no-fund
           node scripts/ci/assert-test-results.mjs --platform ios --xcresult "$RUNNER_TEMP/unit.xcresult"
@@ -1034,8 +1125,8 @@ jobs:
       # this toolchain. Before a TestFlight build, also run VelaWalletTests on an
       # iOS 17.5 simulator locally (087 results, F33).
       - name: Nothing the iOS 17 runtime lacks
-        # The app's binaries are the same in both legs; checked once.
-        if: matrix.suite == 'unit'
+        # The app's binaries are the same in every leg; checked once.
+        if: matrix.leg == 'unit'
         run: |
           node app-ios/scripts/check-ios17-function-metadata.mjs --self-test
           node app-ios/scripts/check-ios17-function-metadata.mjs "$RUNNER_TEMP/dd/Build/Products"

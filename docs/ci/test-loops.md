@@ -20,7 +20,7 @@ gate nothing until each has a proven-stable record on a runner.
 | `desktop-windows` | `cargo check --all-targets --locked` on Windows. |
 | `android` | **`check-native-wire --strict`**. Assemble the debug build and run the JVM suite (this includes **CoreWireDriftTest**). Then an assertion that CoreWireDriftTest and every vector-replay class ran with nothing skipped. |
 | `ios (unit)` | **`check-ios-wire-parity --strict`** (with its self-test). The unit suite on a simulator (macos-15), in parallel — then the one wall-clock guard (`theConfirmReachesThePromptOnAnInstantNetwork`) on its own, one run held to its budget, so it measures the shell and not its neighbours. An assertion that the vector-replay suites and the manifest's required tests ran with nothing skipped. **`check-ios17-function-metadata`** (with its self-test). |
-| `ios (ui)` | The XCUITest leg. It runs on a push to `main`, and on a PR only when the PR carries the `ios-ui` label. It starts a local anvil (`app-ios/scripts/ui-anvil.sh`: no fork, chain 100, Osaka) for `MultisigHermeticUITests`, whose review checks run Safe's real code there; locally, run that script and pass the `TEST_RUNNER_VELA_UI_ANVIL_URL` it prints — those tests fail, never skip, without it. |
+| `ios (ui-1)`, `ios (ui-2)`, `ios (ui-3)` | The XCUITest suite in three shards on three runners, by test class (`UI_SHARD_1`, `UI_SHARD_2` in `ci.yml`; `ui-3` runs every class not named there, so a new class always runs). A push to `main` runs them only when it changes `app-ios/`, `rust/`, `assets/i18n/` or `ci.yml` (the `ios-ui gate` job); a PR only when it carries the `ios-ui` label; `gh workflow run ci.yml --ref <branch>` always. A failed test is retried once: one that fails twice fails the shard, and one that passes only on its retry is reported as a `flaky:` warning. Each shard starts a local anvil (`app-ios/scripts/ui-anvil.sh`: no fork, chain 100, Osaka) for `MultisigHermeticUITests`, whose review checks run Safe's real code there; locally, run that script and pass the `TEST_RUNNER_VELA_UI_ANVIL_URL` it prints — those tests fail, never skip, without it. |
 | `site` | getvela.app's `bun run check`. |
 
 ### The one e2e that gates every pull request
@@ -202,7 +202,7 @@ checks:
 - `android`
 - `ios (unit)`
 
-`ios (ui)` and everything in `nightly.yml` stay optional.
+The `ios (ui-N)` shards and everything in `nightly.yml` stay optional.
 
 **Runners.** Only GitHub-hosted runners are used:
 
