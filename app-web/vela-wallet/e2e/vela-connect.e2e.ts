@@ -407,6 +407,43 @@ test.describe('Vela Connect', () => {
 		await context.close();
 	});
 
+	test('the window leaves to create a wallet and comes back to the request; the site resends it', async ({
+		browser,
+		baseURL
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		await context.addInitScript(() => {
+			localStorage.setItem('vela.intro.seen', String(Date.now()));
+			localStorage.setItem('vela.dev.console', '1');
+		});
+		const site = await openSite(context, baseURL!);
+		const popup = await clickOpening(context, site, 'connect');
+		await expect(popup.getByTestId('connect-no-wallet')).toBeVisible({ timeout: 60_000 });
+		await popup.getByRole('button', { name: en('onboarding.welcome.createWallet') }).click();
+		await popup.waitForURL(/\/en\/create$/);
+
+		// The wallet exists now (the fixture stands in for the passkey ceremony),
+		// and the create flow ends where it always does: in the wallet.
+		const other = await context.newPage();
+		await other.goto('/en/parallel');
+		await other.locator('li code').first().waitFor({ timeout: 60_000 });
+		await other.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await other.waitForURL(/\/en\/wallet$/);
+		await other.close();
+		await popup.goto('/en/wallet');
+
+		// The wallet sends this window back to the request; it says ready again,
+		// the site sends what is unanswered, and the person is asked.
+		await popup.waitForURL(/\/en\/dapp$/, { timeout: 60_000 });
+		await expect(
+			popup.getByRole('heading', { name: `Connect to localhost:${DAPP_PORT}` })
+		).toBeVisible({ timeout: 60_000 });
+		await popup.getByRole('button', { name: 'Connect', exact: true }).click();
+		expect((await answerFor(site, 'connect')).result).toEqual([FIXTURE_ONE]);
+		await context.close();
+	});
+
 	test('redirect mode, a site already connected: answered at once, no warning to read', async ({
 		browser,
 		baseURL
