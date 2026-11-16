@@ -31,8 +31,9 @@ import {
 test.setTimeout(240_000);
 
 const EXAMPLES = join(import.meta.dirname, '..', '..', '..', 'docs', 'vela-connect', 'examples');
-const DAPP_PORT = 8815;
-const DAPP = `http://localhost:${DAPP_PORT}`;
+/** The site's port: a free one, so engines running side by side never share it. */
+let DAPP_PORT = 0;
+let DAPP = '';
 const FIXTURE_ONE = '0xD400866e00B055B20752a826CD5C89b811de130b';
 const STUB = 'https://stub-rpc.test/rpc';
 const RELAY = /vela-relay(-cf)?\.getvela\.app/;
@@ -48,7 +49,7 @@ function serveExamples(): Promise<Server> {
 		'/vela-connect.js': ['vela-connect.js', 'text/javascript; charset=utf-8']
 	};
 	const server = createServer((req, res) => {
-		const path = new URL(req.url ?? '/', DAPP).pathname;
+		const path = new URL(req.url ?? '/', 'http://localhost').pathname;
 		const file = files[path];
 		if (!file) {
 			res.statusCode = 404;
@@ -58,7 +59,13 @@ function serveExamples(): Promise<Server> {
 		res.setHeader('content-type', file[1]);
 		res.end(readFileSync(join(EXAMPLES, file[0])));
 	});
-	return new Promise((resolve) => server.listen(DAPP_PORT, () => resolve(server)));
+	return new Promise((resolve) =>
+		server.listen(0, () => {
+			DAPP_PORT = (server.address() as { port: number }).port;
+			DAPP = `http://localhost:${DAPP_PORT}`;
+			resolve(server);
+		})
+	);
 }
 
 /** A deployed Safe on Ethereum holding 3 ETH at $3,000 — every window of the context sees it. */
@@ -365,6 +372,57 @@ test.describe('Vela Connect', () => {
 		expect((await answerFor(site, 'redirect')).result).toEqual([FIXTURE_ONE]);
 		// The fragment is read and cleared.
 		expect(new URL(site.url()).hash).toBe('');
+		await context.close();
+	});
+
+	test('with no wallet yet, the request waits; once a wallet is here it is asked', async ({
+		browser,
+		baseURL
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		await context.addInitScript(() => {
+			localStorage.setItem('vela.intro.seen', String(Date.now()));
+			localStorage.setItem('vela.dev.console', '1');
+		});
+		const site = await openSite(context, baseURL!);
+		const popup = await clickOpening(context, site, 'connect');
+		await expect(popup.getByTestId('connect-no-wallet')).toBeVisible({ timeout: 60_000 });
+		await expect(
+			popup.getByRole('button', { name: en('onboarding.welcome.createWallet') })
+		).toBeVisible();
+
+		// The person signs in elsewhere (another tab of this wallet): the window
+		// follows, and the request it held is the core's to rule on now.
+		const wallet = await context.newPage();
+		await wallet.goto('/en/parallel');
+		await wallet.locator('li code').first().waitFor({ timeout: 60_000 });
+		await wallet.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await wallet.waitForURL(/\/en\/wallet$/);
+		await expect(
+			popup.getByRole('heading', { name: `Connect to localhost:${DAPP_PORT}` })
+		).toBeVisible({ timeout: 60_000 });
+		await popup.getByRole('button', { name: 'Connect', exact: true }).click();
+		expect((await answerFor(site, 'connect')).result).toEqual([FIXTURE_ONE]);
+		await context.close();
+	});
+
+	test('redirect mode, a site already connected: answered at once, no warning to read', async ({
+		browser,
+		baseURL
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		await enterWallet(context);
+		const site = await openSite(context, baseURL!);
+		const popup = await clickOpening(context, site, 'connect');
+		await popup.getByRole('button', { name: 'Connect', exact: true }).click();
+		await answerFor(site, 'connect');
+		await popup.close();
+
+		await site.click('#redirect-connect');
+		await site.waitForURL(new RegExp(`^${DAPP}`), { timeout: 60_000 });
+		expect((await answerFor(site, 'redirect')).result).toEqual([FIXTURE_ONE]);
 		await context.close();
 	});
 

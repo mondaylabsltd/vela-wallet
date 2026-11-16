@@ -148,7 +148,7 @@
       "goneTitle": "{{host}} 已關閉",
       "goneBody": "此視窗不會再有新的請求。你已核准的操作都在動態紀錄中。",
       "directTitle": "沒有需要核准的內容",
-      "directBody": "與 Vela 合作的應用程式會在需要你確認時開啟此視窗。要使用錢包，請直接開啟 Vela。",
+      "directBody": "接入了 Vela 的應用程式在需要你確認時，會開啟此視窗。要使用錢包，請直接開啟 Vela。",
       "openWallet": "開啟 Vela",
       "badLinkTitle": "此連結無法使用",
       "badLinkBody": "連結不完整，或不是 Vela 能辨識的請求。沒有分享或簽署任何內容。",

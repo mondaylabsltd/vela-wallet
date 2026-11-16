@@ -1225,7 +1225,7 @@
    "goneTitle": "{{host}} 已关闭",
    "goneBody": "此窗口不会再有新的请求。你已批准的操作都在动态记录里。",
    "directTitle": "没有需要批准的内容",
-   "directBody": "与 Vela 合作的应用会在需要你确认时打开此窗口。要使用钱包，请直接打开 Vela。",
+   "directBody": "接入了 Vela 的应用在需要你确认时，会打开此窗口。要使用钱包，请直接打开 Vela。",
    "openWallet": "打开 Vela",
    "badLinkTitle": "此链接无法使用",
    "badLinkBody": "链接不完整，或不是 Vela 能识别的请求。没有分享或签署任何内容。",

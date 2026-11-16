@@ -35,7 +35,13 @@
 	import ConsentFacts from '#lib/dapp/ConsentFacts.svelte';
 	import { hostLabel } from '#lib/dapp/host.ts';
 	import type { RequestMessages } from '#lib/dapp/messages.ts';
-	import { approve, evaluate, type Answerer, type WalletFacts } from '#lib/dapp/request.ts';
+	import {
+		approve,
+		evaluate,
+		type Answerer,
+		type RequestStage,
+		type WalletFacts
+	} from '#lib/dapp/request.ts';
 	import { publishExtSnapshot } from '#lib/dapp/core/ext-cache.ts';
 	import {
 		accountLivesOn,
@@ -267,14 +273,12 @@
 			stage = { kind: 'no-wallet' };
 			return;
 		}
-		if (!unverifiedSeen) {
-			stage = { kind: 'unverified' };
-			return;
-		}
 		chainId = await startChain(request.origin);
 		if (current !== request) return;
-		let ruled;
+		let ruled: RequestStage;
 		try {
+			// The core answers what needs nobody (a site already connected asking
+			// for its account) itself, to the requester; anything else waits.
 			ruled = await evaluate(request, facts, answerTo(request));
 		} catch (error) {
 			console.warn('[connect] request not shown:', error);
@@ -287,6 +291,20 @@
 			return;
 		}
 		if (current !== request) return;
+		if ((ruled.kind === 'consent' || ruled.kind === 'signing') && !unverifiedSeen) {
+			// A redirect: before the person decides anything, Vela says it cannot
+			// confirm who sent the link (B10).
+			heldRuling = ruled;
+			stage = { kind: 'unverified' };
+			return;
+		}
+		await carryOut(request, ruled);
+	}
+
+	/** What the core ruled for `request`, waiting on a redirect's warning. */
+	let heldRuling: RequestStage | null = null;
+
+	async function carryOut(request: ChannelRequest, ruled: RequestStage): Promise<void> {
 		switch (ruled.kind) {
 			case 'done':
 			case 'refused':
@@ -501,9 +519,11 @@
 
 	function onContinueUnverified(): void {
 		const request = current;
-		if (!request) return;
+		const ruled = heldRuling;
+		if (!request || !ruled) return;
 		unverifiedSeen = true;
-		void proceed(request);
+		heldRuling = null;
+		void carryOut(request, ruled);
 	}
 
 	/** Create a wallet or sign in, in this window; the wallet sends it back here. */

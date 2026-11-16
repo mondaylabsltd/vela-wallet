@@ -27,7 +27,11 @@ const STORAGE_SUITES = [
 	// invite added, a rejection at its number, what waits said: what a member
 	// sees and keeps (the store, the passkey, the mailbox's answer) must not
 	// be one engine's.
-	'**/multisig-world.e2e.ts'
+	'**/multisig-world.e2e.ts',
+	// Spec 109, Vela Connect: a site's window, its opener and postMessage, and
+	// the grant the window keeps, are each engine's to get right — Safari
+	// above all, where most people meet a wallet on a phone.
+	'**/vela-connect.e2e.ts'
 ];
 
 export default defineConfig({
