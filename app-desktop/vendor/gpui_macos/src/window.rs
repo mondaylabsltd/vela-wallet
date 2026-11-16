@@ -260,10 +260,12 @@ unsafe fn build_classes() {
                 accepts_first_mouse as extern "C" fn(_, Sel, *mut AnyObject) -> Bool,
             );
 
-            decl.add_method(
-                sel!(_opaqueRectForWindowMoveWhenInTitlebar),
-                opaque_rect_for_window_move_when_in_titlebar as extern "C" fn(_, Sel) -> NSRect,
-            );
+            // spec 095 (vela): upstream overrides the private
+            // `_opaqueRectForWindowMoveWhenInTitlebar` here for windows with
+            // `app_owns_titlebar_drag`. Not registered: the Mac App Store refuses
+            // private selectors, and AppKit's own answer for this (non-opaque)
+            // view is the empty rect upstream returns when the flag is off —
+            // native titlebar dragging, which is what the wallet uses.
 
             decl.add_method(
                 sel!(characterIndexForPoint:),
@@ -294,14 +296,16 @@ unsafe fn build_classes() {
             decl.register()
         };
         WINDOW_STATE_UNARCHIVER_CLASS = {
-            let mut decl =
+            // spec 095 (vela): upstream overrides the private
+            // `_windowRestorationOptions` on this subclass (and returns an instance
+            // of the undocumented `NSWindowRestorationOptions`) to put a restored
+            // window back on its original Space on macOS 15+. Not registered: the
+            // Mac App Store refuses private selectors. The subclass stays, so the
+            // unarchiving below is upstream's; on macOS 15+ a restored window
+            // opens on the current Space, as AppKit decides without the override.
+            let decl =
                 ClassBuilder::new(c"GPUIWindowStateKeyedUnarchiver", class!(NSKeyedUnarchiver))
                     .unwrap();
-            decl.add_method(
-                sel!(_windowRestorationOptions),
-                window_state_unarchiver_restoration_options
-                    as extern "C" fn(_, Sel) -> *mut AnyObject,
-            );
             decl.register()
         };
     }
@@ -333,34 +337,8 @@ extern "C" fn window_state_archiver_will_encode_object(
     }
 }
 
-// Override of the private `_windowRestorationOptions` on our NSKeyedUnarchiver subclass.
-// Returning a default-initialized `NSWindowRestorationOptions` tells AppKit to restore the
-// window to its original Space. This is the macOS 15+ path (FB15644170: the
-// `NSWindowRestoresWorkspaceAtLaunch` user default no longer works there).
-extern "C" fn window_state_unarchiver_restoration_options(
-    _this: &AnyObject,
-    _sel: Sel,
-) -> *mut AnyObject {
-    if !is_macos_version_at_least(NSOperatingSystemVersion {
-        majorVersion: 15,
-        minorVersion: 0,
-        patchVersion: 0,
-    }) {
-        return ptr::null_mut();
-    }
-    // SAFETY: we look the class up by name and only send it `alloc`/`init`/`autorelease`, all of
-    // which have the standard `-> id` signature. Returning `nil` when the class is absent is valid.
-    unsafe {
-        match AnyClass::get(c"NSWindowRestorationOptions") {
-            Some(class) => {
-                let options: *mut AnyObject = msg_send![class, alloc];
-                let options: *mut AnyObject = msg_send![options, init];
-                msg_send![options, autorelease]
-            }
-            None => ptr::null_mut(),
-        }
-    }
-}
+// spec 095 (vela): upstream's `window_state_unarchiver_restoration_options`, the
+// `_windowRestorationOptions` override, is removed with its registration above.
 
 pub(crate) fn convert_mouse_position(position: NSPoint, window_height: Pixels) -> Point<Pixels> {
     point(
@@ -686,11 +664,6 @@ struct MacWindowState {
     external_files_dragged: bool,
     // Whether the next left-mouse click is also the focusing click.
     first_mouse: bool,
-    // When true, the whole content view is reported as app-owned titlebar content via
-    // `_opaqueRectForWindowMoveWhenInTitlebar`, so AppKit does not drag the window from
-    // the titlebar or delay titlebar clicks (a delay first observed on macOS 27). Such
-    // windows draw their own titlebar and move the window via `start_window_move`.
-    app_owns_titlebar_drag: bool,
     fullscreen_restore_bounds: Bounds<Pixels>,
     is_exiting_fullscreen: bool,
     simple_fullscreen_state: Option<SimpleFullscreenState>,
@@ -893,7 +866,10 @@ impl MacWindowState {
         let screen_frame = self
             .native_window()
             .screen()
-            .map_or_default(|screen| screen.visibleFrame());
+            // vela: upstream's `.map_or_default(…)` is Rust 1.98; this repository
+            // builds with 1.97.1 (see Cargo.toml). Same value for an Option.
+            .map(|screen| screen.visibleFrame())
+            .unwrap_or_default();
         bounds.size == rect_to_size(screen_frame)
     }
 
@@ -954,7 +930,10 @@ impl MacWindowState {
         let NSSize { width, height } = self
             .native_window()
             .contentView()
-            .map_or_default(|view| view.frame().size);
+            // vela: upstream's `.map_or_default(…)` is Rust 1.98; this repository
+            // builds with 1.97.1 (see Cargo.toml). Same value for an Option.
+            .map(|view| view.frame().size)
+            .unwrap_or_default();
         size(px(width as f32), px(height as f32))
     }
 
@@ -989,7 +968,6 @@ impl MacWindow {
             titlebar,
             kind,
             is_movable,
-            app_owns_titlebar_drag,
             is_resizable,
             is_minimizable,
             focus,
@@ -1065,7 +1043,10 @@ impl MacWindow {
             let target_screen = target_screen.or_else(|| NSScreen::mainScreen(marker));
             let screen_frame = target_screen
                 .as_ref()
-                .map_or_default(|screen| screen.frame());
+                // vela: upstream's `.map_or_default(…)` is Rust 1.98; this repository
+                // builds with 1.97.1 (see Cargo.toml). Same value for an Option.
+                .map(|screen| screen.frame())
+                .unwrap_or_default();
 
             let window_rect = NSRect::new(
                 NSPoint::new(
@@ -1152,7 +1133,6 @@ impl MacWindow {
                 do_command_handled: None,
                 external_files_dragged: false,
                 first_mouse: false,
-                app_owns_titlebar_drag,
                 fullscreen_restore_bounds: Bounds::default(),
                 is_exiting_fullscreen: false,
                 simple_fullscreen_state: None,
@@ -1614,8 +1594,8 @@ impl PlatformWindow for MacWindow {
 
             // On macOS < 15 the `NSWindowRestoresWorkspaceAtLaunch` user default controls whether
             // the window is restored to its original Space. On macOS 15+ that default is broken
-            // (FB15644170), and the `_windowRestorationOptions` override on our unarchiver subclass
-            // handles it instead.
+            // (FB15644170); upstream's private `_windowRestorationOptions` override handles it
+            // there, which this copy does not carry (spec 095, see `build_classes`).
             if !is_macos_version_at_least(NSOperatingSystemVersion {
                 majorVersion: 15,
                 minorVersion: 0,
@@ -2233,15 +2213,12 @@ impl PlatformWindow for MacWindow {
                             }
                             "Fill" => {
                                 if is_resizable {
-                                    // Unlike `zoom:`, AppKit's private Fill action honors the system's
-                                    // "Tiled windows have margins" setting.
-                                    let responds_to_zoom_fill: Bool =
-                                        msg_send![window, respondsToSelector: sel!(_zoomFill:)];
-                                    if responds_to_zoom_fill == Bool::YES {
-                                        let _: () = msg_send![window, _zoomFill: ptr::null_mut::<AnyObject>()];
-                                    } else {
-                                        let _: () = msg_send![window, zoom: ptr::null_mut::<AnyObject>()];
-                                    }
+                                    // spec 095 (vela): upstream sends AppKit's private
+                                    // `_zoomFill:` here when the window answers it (it honors
+                                    // "Tiled windows have margins"). There is no public Fill,
+                                    // so the window zooms, as upstream does where `_zoomFill:`
+                                    // is missing.
+                                    let _: () = msg_send![window, zoom: ptr::null_mut::<AnyObject>()];
                                 }
                             }
                             _ => {
@@ -2591,13 +2568,16 @@ extern "C" fn reset_cursor_rects(this: &AnyObject, _: Sel) {
             CursorStyle::ResizeUp => msg_send![class!(NSCursor), resizeUpCursor],
             CursorStyle::ResizeDown => msg_send![class!(NSCursor), resizeDownCursor],
 
-            // Undocumented, private class methods:
-            // https://stackoverflow.com/questions/27242353/cocoa-predefined-resize-mouse-cursor
+            // spec 095 (vela): upstream sends the private
+            // `_windowResizeNorth…Cursor` class methods here. The public
+            // `+frameResizeCursorFromPosition:inDirections:` (macOS 15) draws the
+            // same diagonal arrows; before 15 there is no public diagonal cursor,
+            // so the nearest public one stands in.
             CursorStyle::ResizeUpLeftDownRight => {
-                msg_send![class!(NSCursor), _windowResizeNorthWestSouthEastCursor]
+                frame_resize_cursor(NS_CURSOR_FRAME_RESIZE_POSITION_TOP_LEFT)
             }
             CursorStyle::ResizeUpRightDownLeft => {
-                msg_send![class!(NSCursor), _windowResizeNorthEastSouthWestCursor]
+                frame_resize_cursor(NS_CURSOR_FRAME_RESIZE_POSITION_TOP_RIGHT)
             }
 
             CursorStyle::IBeamCursorForVerticalLayout => {
@@ -2613,6 +2593,33 @@ extern "C" fn reset_cursor_rects(this: &AnyObject, _: Sel) {
 
         let bounds: NSRect = msg_send![this, bounds];
         let _: () = msg_send![this, addCursorRect: bounds, cursor: cursor];
+    }
+}
+
+// spec 095 (vela): `NSCursorFrameResizePosition` / `…Directions` (AppKit's
+// NSCursor.h, macOS 15).
+const NS_CURSOR_FRAME_RESIZE_POSITION_TOP_LEFT: NSUInteger = (1 << 0) | (1 << 1);
+const NS_CURSOR_FRAME_RESIZE_POSITION_TOP_RIGHT: NSUInteger = (1 << 0) | (1 << 3);
+const NS_CURSOR_FRAME_RESIZE_DIRECTIONS_ALL: NSUInteger = (1 << 0) | (1 << 1);
+
+/// The diagonal frame-resize cursor through public API only: macOS 15's
+/// `+[NSCursor frameResizeCursorFromPosition:inDirections:]`, else the
+/// crosshair (there is no public diagonal cursor before 15).
+unsafe fn frame_resize_cursor(position: NSUInteger) -> *mut AnyObject {
+    unsafe {
+        let responds: Bool = msg_send![
+            class!(NSCursor),
+            respondsToSelector: sel!(frameResizeCursorFromPosition:inDirections:)
+        ];
+        if responds.as_bool() {
+            msg_send![
+                class!(NSCursor),
+                frameResizeCursorFromPosition: position,
+                inDirections: NS_CURSOR_FRAME_RESIZE_DIRECTIONS_ALL
+            ]
+        } else {
+            msg_send![class!(NSCursor), crosshairCursor]
+        }
     }
 }
 
@@ -3657,24 +3664,9 @@ extern "C" fn accepts_first_mouse(this: &AnyObject, _: Sel, _: *mut AnyObject) -
     Bool::YES
 }
 
-// Reports which region of the view AppKit should treat as app-owned titlebar content
-// (rather than a system-owned window-move region). When `app_owns_titlebar_drag` is
-// true, we claim the entire view so AppKit neither drags the window from the titlebar
-// nor waits to disambiguate double-clicks before delivering titlebar clicks (the macOS
-// 27 delay); such windows implement dragging themselves via [`Window::start_window_move`].
-// Otherwise we return an empty rect so AppKit's native titlebar dragging keeps working.
-// This is independent of `NSWindow.isMovable`, so the Window-menu tiling items stay
-// enabled regardless.
-extern "C" fn opaque_rect_for_window_move_when_in_titlebar(this: &AnyObject, _: Sel) -> NSRect {
-    let zero_rect = NSRect::new(NSPoint::new(0., 0.), NSSize::new(0., 0.));
-    let window_state = unsafe { get_window_state(this) };
-    let app_owns_titlebar_drag = window_state.as_ref().lock().app_owns_titlebar_drag;
-    if app_owns_titlebar_drag {
-        unsafe { msg_send![this, bounds] }
-    } else {
-        zero_rect
-    }
-}
+// spec 095 (vela): upstream's `opaque_rect_for_window_move_when_in_titlebar`, the
+// `_opaqueRectForWindowMoveWhenInTitlebar` override, is removed with its
+// registration in `build_classes`, and with it `MacWindowState::app_owns_titlebar_drag`.
 
 extern "C" fn character_index_for_point(this: &AnyObject, _: Sel, position: NSPoint) -> NSUInteger {
     let position = screen_point_to_gpui_point(this, position);
