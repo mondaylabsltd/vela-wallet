@@ -211,7 +211,7 @@ vela-passkey-win = { path = "../vela-passkey-win" }
 #     is async-only, so a small current-thread runtime drives just the scan; the
 #     advert bytes come back and the runtime is done.
 tungstenite = { version = "0.24", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
-btleplug = "0.11"
+btleplug = "0.12"
 # `net` here is the I/O DRIVER, not networking — the cable tunnel opens no
 # socket through tokio (it is blocking tungstenite; the AI agent's socket, in
 # `clientmcp-client` below, brings its own tokio features). tokio gates
