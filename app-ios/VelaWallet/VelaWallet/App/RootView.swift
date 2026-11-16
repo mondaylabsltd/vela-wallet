@@ -1470,7 +1470,9 @@ struct RootView: View {
                                 token.chainId == row.account.chainIds.first && !token.spam
                                     && token.balance.contains { "123456789".contains($0) }
                             },
-                            onOpen: { multisig.sheet = $0 },
+                            // A person's door: the sheet asked for again opens
+                            // even if the hub already held it (`MultisigHub.open`).
+                            onOpen: { multisig.open($0) },
                             onFund: { enterReceive() },
                             elsewhere: shownElsewhere,
                             onSwitchSpace: { target in
@@ -4124,7 +4126,7 @@ struct RootView: View {
                 "type": "open_linked", "chain_id": tx.chainId, "safe_tx_hash": tx.safeTxHash, "preview": NSNull(),
             ])
         }
-        multisig.sheet = .proposal(chainId: tx.chainId, safeTxHash: tx.safeTxHash)
+        multisig.open(.proposal(chainId: tx.chainId, safeTxHash: tx.safeTxHash))
         return true
     }
 

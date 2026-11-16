@@ -243,7 +243,7 @@ enum MultisigBackgroundBridge {
         if let address = userInfo["vela.multisig.address"] as? String, !address.isEmpty, hub.isMultisig(address) {
             hub.activate(address)
         }
-        hub.sheet = .proposal(chainId: chainId, safeTxHash: hash)
+        hub.open(.proposal(chainId: chainId, safeTxHash: hash))
     }
 
     /// One background round: the machines read every multisig here, then

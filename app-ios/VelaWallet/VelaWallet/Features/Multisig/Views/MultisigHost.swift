@@ -28,13 +28,18 @@ struct MultisigHostModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // What the hub asks for, handed over by the sheet's lifecycle
+            // (`MsSheetPresenter`): the next only once the one before has
+            // gone (`onDismiss`), never into a dismissal still running.
             // Swiped away, a sheet takes its own way out (`sheetDismissed`):
             // a review is withdrawn at once, a site's request left.
             .sheet(item: Binding(
-                get: { hub.sheet },
-                set: { if $0 == nil { hub.sheetDismissed() } else { hub.sheet = $0 } }
-            )) { sheet in
-                sheetView(sheet)
+                get: { hub.presenter.shown },
+                set: { if $0 == nil { hub.sheetBindingCleared() } }
+            ), onDismiss: { hub.sheetGone() }) { shown in
+                sheetView(shown.sheet)
+                    .onAppear { hub.sheetAppeared(shown) }
+                    .onDisappear { hub.sheetDisappeared(shown) }
                     .environment(\.msOpenOwnNode, onOwnNode)
                     .modifier(MultisigOverlays(hub: hub, words: words, scheme: scheme))
                     .themed(scheme)
@@ -115,7 +120,8 @@ struct MultisigOverlays: ViewModifier {
     var onlyWithoutSheet = false
 
     func body(content: Content) -> some View {
-        let active = !onlyWithoutSheet || hub.sheet == nil
+        // Without a sheet: none asked for, none up, none still going.
+        let active = !onlyWithoutSheet || (hub.sheet == nil && hub.presenter.settled)
         content
             .sheet(item: Binding(
                 get: { active ? hub.riskAsk : nil },

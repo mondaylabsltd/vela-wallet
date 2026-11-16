@@ -511,10 +511,11 @@ final class AppGraph {
             await multisig?.proposeFromSend(operation)
         }
         // A multisig's send proposed: the send closes and the transaction's
-        // own sheet takes over (approve, execute, ask the others).
+        // own sheet takes over (approve, execute, ask the others) — once its
+        // review, moved aside on "working", has gone (`MsSheetPresenter`).
         sendStore.onProposed = { [weak flowNav, weak multisig] chainId, hash in
             flowNav?.close()
-            multisig?.sheet = .proposal(chainId: chainId, safeTxHash: hash)
+            multisig?.open(.proposal(chainId: chainId, safeTxHash: hash))
         }
         // core-ms-2: a site's `wallet_getCallsStatus` of a multisig batch is
         // a read the browser asks; the proposals machine answers it.
