@@ -866,10 +866,7 @@ impl MacWindowState {
         let screen_frame = self
             .native_window()
             .screen()
-            // vela: upstream's `.map_or_default(…)` is Rust 1.98; this repository
-            // builds with 1.97.1 (see Cargo.toml). Same value for an Option.
-            .map(|screen| screen.visibleFrame())
-            .unwrap_or_default();
+            .map_or_default(|screen| screen.visibleFrame());
         bounds.size == rect_to_size(screen_frame)
     }
 
@@ -930,10 +927,7 @@ impl MacWindowState {
         let NSSize { width, height } = self
             .native_window()
             .contentView()
-            // vela: upstream's `.map_or_default(…)` is Rust 1.98; this repository
-            // builds with 1.97.1 (see Cargo.toml). Same value for an Option.
-            .map(|view| view.frame().size)
-            .unwrap_or_default();
+            .map_or_default(|view| view.frame().size);
         size(px(width as f32), px(height as f32))
     }
 
@@ -1043,10 +1037,7 @@ impl MacWindow {
             let target_screen = target_screen.or_else(|| NSScreen::mainScreen(marker));
             let screen_frame = target_screen
                 .as_ref()
-                // vela: upstream's `.map_or_default(…)` is Rust 1.98; this repository
-                // builds with 1.97.1 (see Cargo.toml). Same value for an Option.
-                .map(|screen| screen.frame())
-                .unwrap_or_default();
+                .map_or_default(|screen| screen.frame());
 
             let window_rect = NSRect::new(
                 NSPoint::new(
