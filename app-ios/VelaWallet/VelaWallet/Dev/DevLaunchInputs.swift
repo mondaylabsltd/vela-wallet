@@ -33,6 +33,11 @@
 //    (`app-web/trusted-signer/dist`, served locally) before it is deployed.
 //    The core's `signer_page_set_test_launch`; it is still fetched, hashed and
 //    ruled on. Not stored: one launch's.
+//  - `VELA_ANIMATION_SPEED` — a number in (0, 10]: every window's layer runs
+//    at that speed (`0.25`: each animation four times as long, `4`: a
+//    quarter), so a UI test can line a sheet's transition up against work
+//    that lands while it runs, as a slow CI simulator does — the race a fast
+//    Mac never shows. Not stored: one launch's.
 //
 //  Applied in the app's init, before the object graph — and so before any
 //  machine has read a store. Persisted, like the parallel space: a relaunch
@@ -44,6 +49,7 @@
 #if DEBUG
 
 import Foundation
+import UIKit
 import VelaCore
 
 @MainActor
@@ -60,6 +66,7 @@ enum DevLaunchInputs {
     /// build is unsigned, so iOS never hands it a universal link of its own;
     /// this is how a UI test opens one. Debug only, like every input here.
     static let openLinkVar = "VELA_OPEN_LINK"
+    static let animationSpeedVar = "VELA_ANIMATION_SPEED"
 
     /// The launch link, when one was given and it is a URL.
     static var launchLink: URL? {
@@ -74,6 +81,27 @@ enum DevLaunchInputs {
         } catch {
             fatalError("[vela-wallet] \(error)")
         }
+        installAnimationSpeed(ProcessInfo.processInfo.environment[animationSpeedVar])
+    }
+
+    /// The observer that slows every window, while the process lives.
+    private static var windowWatch: NSObjectProtocol?
+
+    /// `VELA_ANIMATION_SPEED`: each window, as it is first shown, runs its
+    /// layer at the speed named — every sheet's transition with it, so its
+    /// presentation's completion (and `onDismiss`) come as late as they do on
+    /// a slow simulator. Anything but a number in (0, 10] stops the launch.
+    static func installAnimationSpeed(_ raw: String?) {
+        guard let raw = nonEmpty(raw) else { return }
+        guard let speed = Float(raw), speed > 0, speed <= 10 else {
+            fatalError("[vela-wallet] \(animationSpeedVar)=\(raw) is not a speed in (0, 10]")
+        }
+        windowWatch = NotificationCenter.default.addObserver(
+            forName: UIWindow.didBecomeVisibleNotification, object: nil, queue: .main
+        ) { note in
+            MainActor.assumeIsolated { (note.object as? UIWindow)?.layer.speed = speed }
+        }
+        print("[vela-wallet] dev: animations at \(speed)× from \(animationSpeedVar)")
     }
 
     struct InputError: Error, CustomStringConvertible {

@@ -45,8 +45,13 @@ final class MultisigHub {
 
     // MARK: - What the root view presents
 
-    /// The multisig sheet open now (one at a time, as on the web).
-    var sheet: MultisigSheet?
+    /// The multisig sheet open now (one at a time, as on the web) — as the
+    /// hub asks for it. What the root presents, and when, is `presenter`'s.
+    var sheet: MultisigSheet? {
+        didSet { if sheet != oldValue { presenter.ask(sheet) } }
+    }
+    /// The root's sheet, handed over by its lifecycle (`MsSheetPresenter`).
+    private(set) var presenter = MsSheetPresenter()
     /// The high-risk question (§3.5), while a signature waits on it.
     private(set) var riskAsk: MultisigRiskAsk?
     /// An outside member's wallet asked to sign (M4), while it is open.
@@ -615,6 +620,34 @@ final class MultisigHub {
         proposals.dispatch(["type": "withdraw"])
     }
 
+    // MARK: - The root's sheet, by its lifecycle (`MsSheetPresenter`)
+
+    /// A person's door to a sheet — the home card, an Activity row, a
+    /// notification, a send just proposed: `next` shown, whatever the hub
+    /// held before. Asked for again while the hub already holds it and it is
+    /// not on screen (its showing lost), it is handed over again.
+    func open(_ next: MultisigSheet) {
+        if sheet?.id == next.id { presenter.reopen(next) } else { sheet = next }
+    }
+
+    /// The root's sheet content appeared (`MultisigHost`).
+    func sheetAppeared(_ shown: MsSheetPresenter.Shown) { presenter.appeared(shown) }
+
+    /// The root's sheet content left the screen (`MultisigHost`).
+    func sheetDisappeared(_ shown: MsSheetPresenter.Shown) { presenter.disappeared(shown, wanted: sheet) }
+
+    /// The root's sheet has gone, UIKit's dismissal finished (its
+    /// `onDismiss`): the sheet asked for meanwhile is handed over now.
+    func sheetGone() { presenter.gone(wanted: sheet) }
+
+    /// The root's sheet binding was set to nothing: the person's swipe
+    /// (`sheetDismissed`) only while a sheet is on screen — SwiftUI writes
+    /// `nil` back as a dismissal the hub asked for finishes too, and that
+    /// echo must never close (or withdraw) the sheet asked for next.
+    func sheetBindingCleared() {
+        if presenter.swipeIsThePersons { sheetDismissed() }
+    }
+
     /// The person swiped the sheet that is up away (an interactive dismiss —
     /// the root's sheet binding set to nothing). It is that sheet's own way
     /// out, at once:
@@ -776,7 +809,7 @@ final class MultisigHub {
                 "type": "open_linked", "chain_id": chainId, "safe_tx_hash": hash,
                 "preview": notice["preview"] ?? NSNull(),
             ])
-            sheet = .proposal(chainId: chainId, safeTxHash: hash)
+            open(.proposal(chainId: chainId, safeTxHash: hash))
         case "outside_sign":
             let request = notice["request"] as? [String: Any] ?? [:]
             openOutside(request)
@@ -987,6 +1020,110 @@ enum MultisigSheet: Identifiable, Equatable {
         case .link: "link"
         case .dapp(let id): "dapp:\(id)"
         }
+    }
+}
+
+/// When the root's one multisig sheet is handed to SwiftUI (`MultisigHost`):
+/// the hub's `sheet` is what is asked for, `shown` what the root's
+/// `.sheet(item:)` reads — and the two part only while one sheet makes way
+/// for the next.
+///
+/// A sheet asked for while another is up waits for that one to have GONE —
+/// its `onDismiss`, once UIKit has finished taking it down — and is handed
+/// over then, never while the dismissal still runs. Before, the hub swapped
+/// the item in mid-flight and left the order to SwiftUI. A propose does
+/// exactly that: its review is moved aside on "working" and the
+/// transaction's sheet asked for as soon as the mailbox answers, often
+/// before the review has gone — and on CI's slow simulator that sheet now
+/// and then never came. SwiftUI also writes `nil` back through the binding
+/// as a dismissal the hub asked for finishes, which the old setter took for
+/// the person's swipe (`sheetDismissed`: whatever was asked for meanwhile,
+/// closed). That echo is told from a swipe by `onScreen` now: only a sheet
+/// on screen can be swiped.
+///
+/// And nothing stays claimed that is not on screen: a person's door (the
+/// home card, an Activity row, a notification) asking for the sheet the hub
+/// already holds hands it over again, as a new turn — a new identity
+/// SwiftUI must present — whenever it is not on screen (`reopen`).
+struct MsSheetPresenter {
+    /// One showing of a sheet. `turn` tells a showing handed over again
+    /// from the one before it.
+    struct Shown: Identifiable, Equatable {
+        let sheet: MultisigSheet
+        let turn: Int
+        var id: String { "\(sheet.id)#\(turn)" }
+    }
+
+    /// What the root's sheet binding reads.
+    private(set) var shown: Shown?
+    /// `shown`'s content appeared, and has not disappeared since.
+    private(set) var onScreen = false
+    /// A sheet on screen is being taken down: nothing is handed over until
+    /// it has gone (`gone`). `shown` is `nil` meanwhile.
+    private(set) var leaving: Shown?
+    private var turns = 0
+
+    /// Nothing up, nothing going: the root may present something else.
+    var settled: Bool { shown == nil && leaving == nil }
+
+    /// The hub's sheet is now `wanted`.
+    mutating func ask(_ wanted: MultisigSheet?) {
+        if let current = shown {
+            // The same sheet (a hash in other case is the same transaction).
+            if current.sheet.id == wanted?.id { return }
+            shown = nil
+            if onScreen {
+                // Taken down; the next is handed over once it has gone.
+                onScreen = false
+                leaving = current
+                return
+            }
+            // Handed over and not yet on screen: nothing to wait for.
+        }
+        if leaving == nil { hand(wanted) }
+    }
+
+    /// The sheet that was taken down has gone (its `onDismiss`): what the
+    /// hub asks for now is handed over.
+    mutating func gone(wanted: MultisigSheet?) {
+        guard leaving != nil else { return }
+        leaving = nil
+        hand(wanted)
+    }
+
+    /// `showing`'s content is on screen.
+    mutating func appeared(_ showing: Shown) {
+        if shown?.id == showing.id { onScreen = true }
+    }
+
+    /// `showing`'s content left the screen. For the sheet being taken down
+    /// it is gone, `onDismiss` or not (it comes after UIKit finished either
+    /// way); for the one still shown, it is no longer on screen.
+    mutating func disappeared(_ showing: Shown, wanted: MultisigSheet?) {
+        if leaving?.id == showing.id {
+            gone(wanted: wanted)
+        } else if shown?.id == showing.id {
+            onScreen = false
+        }
+    }
+
+    /// The binding was set to `nil`: a person's swipe only while what is
+    /// shown is on screen — otherwise the echo of a dismissal the hub asked
+    /// for (`false`).
+    var swipeIsThePersons: Bool { shown != nil && onScreen }
+
+    /// A person asked again for `wanted`, the sheet the hub already holds:
+    /// handed over again unless it is on screen or on its way out (its
+    /// dismissal hands over what is asked for then).
+    mutating func reopen(_ wanted: MultisigSheet) {
+        guard !onScreen, leaving == nil else { return }
+        turns += 1
+        hand(wanted)
+    }
+
+    private mutating func hand(_ wanted: MultisigSheet?) {
+        shown = wanted.map { Shown(sheet: $0, turn: turns) }
+        onScreen = false
     }
 }
 

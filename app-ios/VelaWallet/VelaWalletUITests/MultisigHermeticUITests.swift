@@ -73,9 +73,14 @@ final class MultisigHermeticUITests: XCTestCase {
         app.terminate()
     }
 
-    private func launch() throws -> XCUIApplication {
+    private func launch(animationSpeed: String? = nil) throws -> XCUIApplication {
         let world = try XCTUnwrap(world)
         let app = XCUIApplication()
+        // A run can slow every test's animations (`TEST_RUNNER_VELA_ANIMATION_SPEED`)
+        // to stand where a slow CI simulator stands; a test that needs it, always.
+        if let speed = animationSpeed ?? ProcessInfo.processInfo.environment["VELA_ANIMATION_SPEED"] {
+            app.launchEnvironment["VELA_ANIMATION_SPEED"] = speed
+        }
         app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
         app.launchEnvironment["VELA_PARALLEL_SIGNER"] = "0"
         app.launchEnvironment["VELA_LANG"] = "en"
@@ -231,12 +236,26 @@ final class MultisigHermeticUITests: XCTestCase {
     /// on CI now and then (the sheet never opened, the app's requests
     /// trickling after a burst), and a screenshot alone does not say whether
     /// the app was waiting on the world or the world on the chain.
-    private func trail(_ world: LocalMultisigWorld) -> String {
+    private func trail(_ world: LocalMultisigWorld, _ app: XCUIApplication) -> String {
         let asked = world.requests
         return "the world was asked \(asked.count) times, the chain answered "
             + "\(world.rpcAnswered("eth_call")) eth_call, \(world.rpcAnswered("debug_traceCall")) debug_traceCall, "
             + "\(world.rpcAnswered("eth_simulateV1")) eth_simulateV1; mailbox \(world.mailbox.count); "
-            + "last asked: \(asked.suffix(30).joined(separator: ", "))"
+            + "\(onScreen(app)); last asked: \(asked.suffix(30).joined(separator: ", "))"
+    }
+
+    /// Which multisig marks the screen holds, for a failure message: the
+    /// transaction's title appears only once its sheet is up AND the item is
+    /// in the list read back, so "no title" alone does not say which of the
+    /// two never came.
+    private func onScreen(_ app: XCUIApplication) -> String {
+        let marks = [
+            "multisig.draft.title", "multisig.draft.propose", "multisig.proposal.opening",
+            "multisig.proposal.missing", "multisig.proposal.openFailed", "multisig.sheet.close",
+            "multisig.home", "multisig.home.proposal",
+        ]
+        let shown = marks.filter { element(app, $0).exists }
+        return "on screen: \(shown.isEmpty ? "none of the multisig marks" : shown.joined(separator: ", "))"
     }
 
     func testCreateATwoOfThreeAndProposeASendAgainstALocalWorld() throws {
@@ -256,7 +275,7 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertTrue(world.mailbox.isEmpty, "something reached the mailbox before the review was confirmed")
         shot(app, "hermetic-draft-review")
         tap(app, "multisig.draft.propose")
-        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world))")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world, app))")
         shot(app, "hermetic-proposed")
 
         // The mailbox has it: 0.5 xDAI to Three, from the multisig, at its
@@ -318,7 +337,7 @@ final class MultisigHermeticUITests: XCTestCase {
         assertReviewChecked(app, world)
         XCTAssertTrue(world.mailbox.isEmpty)
         tap(app, "multisig.draft.propose")
-        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world))")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world, app))")
         XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
         shot(app, "swipe-review-proposed")
     }
@@ -368,9 +387,46 @@ final class MultisigHermeticUITests: XCTestCase {
         XCTAssertTrue(world.mailbox.isEmpty, "the hold alone sent something: \(world.mailbox)")
         shot(app, "unchecked-anyway-step")
         confirm.tap()
-        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "confirmed, the proposal sheet never opened; \(trail(world))")
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "confirmed, the proposal sheet never opened; \(trail(world, app))")
         XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
         XCTAssertEqual((world.mailbox.first?["safe"] as? String)?.lowercased(), address.lowercased())
         shot(app, "unchecked-proposed")
+    }
+
+    /// The transaction's sheet after a send's propose, and again from the
+    /// home. Run at a quarter of the animations' speed: the review, moved
+    /// aside on "working", is still going when the mailbox answers — where a
+    /// slow CI simulator stands, and where the sheet asked for then now and
+    /// then never came (it is handed over once the review has gone,
+    /// `MsSheetPresenter`). Closed, the same transaction opens again from the
+    /// home's list, as often as it is asked for.
+    func testAProposedSendsSheetOpensAndOpensAgainFromTheHome() throws {
+        let world = try XCTUnwrap(world)
+        let app = try launch(animationSpeed: "0.25")
+        _ = try createTwoOfThree(app, world)
+
+        toSendConfirm(app).tap()
+        let propose = element(app, "multisig.draft.propose")
+        XCTAssertTrue(propose.waitForExistence(timeout: 60), "no review before the passkey")
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: propose)
+        waitForExpectations(timeout: 60)
+        assertReviewChecked(app, world)
+        propose.tap()
+        let title = element(app, "multisig.proposal.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 90), "the proposal sheet never opened; \(trail(world, app))")
+        XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
+        XCTAssertFalse(element(app, "multisig.draft.title").exists, "the review is still up over it")
+        shot(app, "reopen-proposed")
+
+        // Closed, and opened again from the home's list — twice.
+        for round in 1...2 {
+            tap(app, "multisig.sheet.close")
+            XCTAssertTrue(title.waitForNonExistence(timeout: 20), "round \(round): the sheet did not close")
+            tap(app, "multisig.home.proposal", timeout: 60)
+            XCTAssertTrue(title.waitForExistence(timeout: 30), "round \(round): the home's row did not open it again; \(onScreen(app))")
+        }
+        XCTAssertEqual(world.mailbox.count, 1, "opening it again sent something: \(world.mailbox)")
+        shot(app, "reopen-from-list")
+        tap(app, "multisig.sheet.close")
     }
 }
