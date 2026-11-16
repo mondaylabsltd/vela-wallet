@@ -191,6 +191,10 @@ The project-wide runbook is `docs/project-takeover/05-deployment-runbook.md`.
   time.** In the Worker it is not a URL, and the error takes down every page
   that imports the module. `src/lib/evm/wasm.ts` resolves its wasm URL only
   when it is first loaded, for this reason.
+- **Many contract reads go through `client.readContracts`**, which folds them
+  into Multicall3 `aggregate3` calls, never a `Promise.all` of `readContract`.
+  A `/registry` page is two requests that way, not two per wallet. Reads that
+  poll (the homepage counts) run only while the tab is visible.
 - **Paths passed to `resolve()` have no leading `/`**, except route IDs with
   parameters: `resolve('docs/faq')`, `resolve('')` for the home page, but
   `resolve('/download/[platform]', { platform })`.

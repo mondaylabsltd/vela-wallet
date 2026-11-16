@@ -17,9 +17,6 @@ export const GNOSIS_RPCS = [
 	'https://rpc.gnosischain.com',
 	'https://rpc.gnosis.gateway.fm',
 	'https://gnosis-rpc.publicnode.com',
-	'https://rpc.ankr.com/gnosis',
-	'https://gnosis-mainnet.public.blastapi.io',
-	'https://gnosis.blockpi.network/v1/rpc/public',
 	'https://gnosis.drpc.org',
 	'https://1rpc.io/gnosis',
 	'https://gnosis.oat.farm'
