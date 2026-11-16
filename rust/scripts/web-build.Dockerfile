@@ -3,7 +3,7 @@
 # Every tool that touches rust/pkg-web and assets/wasm/vela_core_bg.*.wasm is
 # named here by an exact version and, where it is a download, by its sha256:
 #
-#   rustc / cargo     1.97.1, the official image by digest (rust-toolchain.toml)
+#   rustc / cargo     1.100.0, the official image by digest (rust-toolchain.toml)
 #   wasm32 target     the same toolchain's, installed below
 #   wasm-pack         0.15.0, built from crates.io with --locked
 #   wasm-bindgen-cli  0.2.126 (= wasm-bindgen in rust/Cargo.lock), --locked;
@@ -20,7 +20,7 @@
 # The image by its index digest. BASE may name a mirror of the SAME digest
 # (`VELA_BASE_IMAGE` in reproduce-web.sh) where Docker Hub is out of reach;
 # the digest is what makes it the same image.
-ARG BASE=rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+ARG BASE=rust:1.100.0-bookworm@sha256:ade39a710ef85f3506cffcfec3e8a24ba090badef1dff2fb798f71d878833fea
 FROM ${BASE}
 
 ARG TARGETARCH

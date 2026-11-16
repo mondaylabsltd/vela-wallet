@@ -5,7 +5,7 @@
 ## 前置
 
 - **Node 22 + npm ≥ 9**(根目录工具包);**Bun 1.4.2**(两个 Web 应用;钱包版本在其 `packageManager` 字段)
-- **Rust 1.97.1**(`rustup`),加 `wasm32-unknown-unknown` target 与 `wasm-pack 0.15`(仅在改动核心后需要重建 wasm)
+- **Rust 1.100.0**(`rustup`),加 `wasm32-unknown-unknown` target 与 `wasm-pack 0.15`(仅在改动核心后需要重建 wasm)
 - iOS:Xcode(需能编译 xcframework);Android:JDK 17 + Android Studio/SDK;桌面:gpui 的系统依赖(见 `app-desktop/vela-wallet/README.md`)
 - 无需任何私有凭据即可开发钱包本体(RPC 走公共池;bundler 走内置的自营中继 `https://vela-relay-cf.getvela.app`,默认值在核心 `rust/crates/vela-core/src/app/network_admin.rs:154`,设置里可覆盖)
   - 勘误(spec 081 FR-015):此处原写「bundler 走内置 `getvela.app/api/bundler` 代理」——那条路由从无调用方,已随另外四条一并删除。

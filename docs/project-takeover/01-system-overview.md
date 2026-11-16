@@ -16,7 +16,7 @@ Vela Wallet 是一个 **passkey(P-256/WebAuthn)签名的 ERC-4337 智能合约�
 
 | 层 | 技术 | 版本 | 证据 |
 |---|---|---|---|
-| 共享核心 | Rust:`vela-core`(crux 状态机 + 纯计算)、`vela-core-wasm`(wasm-bindgen)、`vela-core-uniffi`(Swift/Kotlin 绑定) | Rust 1.97.1 | `rust/Cargo.toml`, `.github/workflows/ci.yml` `rust` job |
+| 共享核心 | Rust:`vela-core`(crux 状态机 + 纯计算)、`vela-core-wasm`(wasm-bindgen)、`vela-core-uniffi`(Swift/Kotlin 绑定) | Rust 1.100.0 | `rust/Cargo.toml`, `.github/workflows/ci.yml` `rust` job |
 | Web 壳 | SvelteKit 2 / Svelte 5(runes)/ TypeScript strict / Cloudflare Workers;同一份代码另构建 Chrome MV3 扩展 | Bun 1.4.2 + Node 22 | `app-web/vela-wallet/package.json`, `wrangler.jsonc`, `extension/build.mjs` |
 | 桌面壳 | Rust + gpui(Zed 的 UI 框架),直接依赖 `vela-core` crate | — | `app-desktop/vela-wallet/Cargo.toml` |
 | iOS 壳 | SwiftUI + VelaCoreKit(SPM 包,包裹 uniffi 生成的 xcframework) | Xcode 16 | `app-ios/VelaWallet/VelaWallet.xcodeproj`, `rust/scripts/build-ios-xcframework.sh` |

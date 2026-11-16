@@ -71,14 +71,14 @@ const CHECK_ONLY = process.argv.includes('--check');
  * - registry crates under the builder's `$CARGO_HOME` (99 strings) → `/cargo`;
  * - the standard library: rustup's `rust-src` component makes rustc translate
  *   std's virtual `/rustc/<commit>/library/…` back into the toolchain's own
- *   directory (`~/.rustup/toolchains/1.97.1-aarch64-apple-darwin/lib/rustlib/
+ *   directory (`~/.rustup/toolchains/<toolchain>-aarch64-apple-darwin/lib/rustlib/
  *   src/rust/…`, 27 strings in the 0.9.8 module — a developer's home directory
  *   shipped to wallet.getvela.app). Mapped back to the virtual path, which is
  *   what a toolchain without `rust-src` (a CI runner, the container) writes;
  * - this checkout (a path dependency outside the workspace would be absolute)
  *   → `/vela`. The workspace's own crates are already relative.
  *
- * `profile.trim-paths` would do this, and is still unstable on 1.97.
+ * `profile.trim-paths` would do this, and is still unstable on 1.100.
  */
 function remapFlags() {
   const cargoHome = process.env.CARGO_HOME ?? join(homedir(), '.cargo');

@@ -221,8 +221,8 @@ updates:
   # pinned to a BRANCH head, dtolnay/rust-toolchain (`# stable branch head`),
   # has no release tags for Dependabot to follow: move it by hand
   # (`git ls-remote https://github.com/dtolnay/rust-toolchain refs/heads/stable`).
-  # Every step that uses it names its toolchain (1.97.1) except four in the
-  # desktop packaging workflows, which take the branch's default (`stable`).
+  # Every step that uses it names its toolchain (1.100.0, the pin in
+  # rust/rust-toolchain.toml), the desktop packaging workflows included.
   - package-ecosystem: github-actions
     directory: /
     schedule:

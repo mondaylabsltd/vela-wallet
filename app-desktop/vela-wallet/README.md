@@ -52,7 +52,7 @@ Two notes that are easy to get wrong:
 
 ### Rust toolchain
 
-`rustc` **1.97.1**, matching the pin in [rust-toolchain.toml](../../rust/rust-toolchain.toml).
+`rustc` **1.100.0**, matching the pin in [rust-toolchain.toml](../../rust/rust-toolchain.toml).
 The crate is `edition = "2024"`, so older toolchains will not parse it.
 
 ---
