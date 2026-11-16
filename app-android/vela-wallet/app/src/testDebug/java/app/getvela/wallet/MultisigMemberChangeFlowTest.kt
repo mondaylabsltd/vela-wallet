@@ -116,9 +116,21 @@ class MultisigMemberChangeFlowTest {
             }
             // The review sheet is up, with the draft the machine drew: the person proposes.
             withTimeout(30_000) { while (s.hub.sheet.value != MultisigSheet.Review(chainId)) delay(20) }
-            assertNotNull("the review is drawn before anything is signed", s.hub.proposalsView.value.draft)
+            // The person presses the sheet's button only once it can be pressed: the
+            // draft's review settled and its sign door open. The sheet goes up before
+            // that (the review still loading, or the typed view not yet caught up),
+            // and a door read then can say "plain press" for a review that settles to
+            // "… anyway" — the core rightly refuses it (anyway_not_confirmed) and
+            // keeps the draft, so propose() waits for a press no one makes. Seen on a
+            // loaded CI runner and reproduced locally under CPU load, on crux 0.19
+            // and 0.20 alike.
+            val door = poll(30_000, "the draft's review settled, its button pressable") {
+                s.hub.proposalsView.value.draft
+                    ?.let { app.getvela.wallet.feature.multisig.draftDoor(it, refuseBlind = false) }
+                    ?.takeIf { it.enabled }
+            }
             assertTrue("no passkey before the review is confirmed", s.world.passkeys.isEmpty() || out.isNotEmpty())
-            s.hub.confirmDraft(null, anywayConfirmed = app.getvela.wallet.feature.multisig.draftDoor(s.hub.proposalsView.value.draft!!, refuseBlind = false).anyway, refuseBlind = false)
+            s.hub.confirmDraft(null, anywayConfirmed = door.anyway, refuseBlind = false)
             out[chainId] = withTimeout(60_000) { settled.await() }
         }
         return out
