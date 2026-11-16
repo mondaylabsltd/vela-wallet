@@ -596,6 +596,13 @@ tasks.withType<Test>().configureEach {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    // `registerForActivityResult` needs Fragment 1.3.0 or later on the
+    // classpath (lint `InvalidFragmentVersionForActivityResult`, fatal in a
+    // release build). Nothing here asked for Fragment, so it came in through
+    // others: 1.5.7 at runtime (Play services), but biometric 1.1.0's 1.2.5
+    // on the compile classpath, which lint reads. Stated here at the version
+    // the app already ran on, so the shipped bytes do not change.
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
