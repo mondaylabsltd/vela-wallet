@@ -13,6 +13,7 @@ import {
 	readRedirect,
 	readyMessage,
 	redirectBack,
+	redirectRefusal,
 	responseMessage,
 	returnOrigin
 } from './protocol';
@@ -214,5 +215,35 @@ describe('redirectBack', () => {
 			state: STATE,
 			error: { code: 4001, message: 'User rejected the request' }
 		});
+	});
+});
+
+describe('redirectRefusal', () => {
+	it('refuses message signatures and what changes a site’s standing', () => {
+		for (const method of [
+			'personal_sign',
+			'eth_sign',
+			'eth_signTypedData',
+			'eth_signTypedData_v4',
+			'wallet_revokePermissions',
+			'wallet_switchEthereumChain',
+			'wallet_addEthereumChain'
+		]) {
+			expect(redirectRefusal(method)).toMatch(/popup mode/);
+		}
+	});
+
+	it('takes a connect, a transaction, a batch and the reads', () => {
+		for (const method of [
+			'eth_requestAccounts',
+			'eth_accounts',
+			'eth_chainId',
+			'eth_sendTransaction',
+			'wallet_sendCalls',
+			'wallet_getCallsStatus',
+			'wallet_getCapabilities'
+		]) {
+			expect(redirectRefusal(method)).toBeNull();
+		}
 	});
 });

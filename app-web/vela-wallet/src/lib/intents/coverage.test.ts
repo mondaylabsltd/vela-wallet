@@ -165,6 +165,7 @@ const DISPATCHED: Record<string, Place> = {
 /** Spec 107: the committing modules' functions a screen calls. */
 const FUNCTIONS: Record<string, Place> = {
 	'dapp/host.hostLabel': { view: 'what the sheet draws' },
+	'dapp/grants.getGrant': { machine: 'a read' },
 	'dapp/grants.getOriginChain': { machine: 'a read' },
 	'dapp/grants.originHasOwnChain': { machine: 'a read' },
 	'dapp/grants.watchStartChain': {

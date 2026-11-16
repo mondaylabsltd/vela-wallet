@@ -56,9 +56,12 @@ before `window.open`). Browsers block a window opened later, and Safari blocks i
 
 ```js
 const VELA = 'https://wallet.getvela.app';
-const popup = window.open(`${VELA}/dapp`, 'vela-connect', 'popup,width=420,height=720');
+const popup = window.open(`${VELA}/dapp`, `vela-${crypto.randomUUID()}`, 'popup,width=420,height=720');
 if (!popup) { /* blocked: use redirect mode (§4) */ }
 ```
+
+Give the window a **name of its own** (random, as above), never a fixed one: any page can re-point a window it can
+name.
 
 Your page **must not** send `Cross-Origin-Opener-Policy: same-origin` (it cuts the window off from yours).
 `same-origin-allow-popups` and no header are both fine. Vela's page sends none.
@@ -74,6 +77,9 @@ When Vela can take requests it posts to its opener:
 Send nothing before it. `ready` comes again if the window reloads or comes back to `/dapp` after the person
 created a wallet (§3.6). Each `ready` means: "anything you sent before that I have not answered, send again".
 Vela never answers the same `id` twice.
+
+**Except a payment.** An `eth_sendTransaction` or `wallet_sendCalls` still unanswered when `ready` comes **again**
+may have gone out before the reload: do not resend it. Treat it as unknown (§6) — check the chain, then ask again.
 
 Accept a message only when `event.source === popup` and `event.origin === VELA`.
 
@@ -120,7 +126,10 @@ EIP-1193 defines (§6).
 - **The person closes it.** Watch `popup.closed` (poll every 500 ms). Vela answers what it owed when the window
   goes, if the browser lets it run (§6), but a window can close without a word: treat an unanswered request as
   **unknown** — see §6 for what that means per method.
-- **Your page goes away.** Vela notices the opener is gone and stops what it was asking the person.
+- **Your page goes away.** Close Vela's window on `pagehide`, so the person is not asked anything for a page that
+  is gone. (A page that navigates to another origin keeps its window open, and Vela cannot tell: an answer sent then
+  is lost. Vela's activity still has what happened.) If the window outlives your page, Vela sees its opener gone and
+  stops.
 
 ### 3.6 A person with no wallet
 
@@ -159,11 +168,28 @@ The JSON is `{"vela":1, "state":"…", "result": …}` or `{"vela":1, "state":"�
 You **must** compare `state` with the one you kept and **ignore** the answer if they differ. Then remove the
 fragment (`history.replaceState`).
 
-### 4.3 What redirect mode cannot prove
+### 4.3 What redirect mode cannot prove, and what it therefore does not do
 
 A link can be made by anyone. Vela cannot confirm that your site made it, only that the answer will go to
-`return`'s origin. Vela says exactly that to the person, on every redirect request. That is why popup mode is
-the default and why `state` is required: an answer you did not ask for must be thrown away.
+`return`'s origin. So:
+
+- **Before the person decides anything** (a connect card, a transaction), Vela says it cannot confirm who sent the
+  link, and the person continues or cancels.
+- **Vela goes back on its own only to a site the person has connected.** Any other answer — even one that needed
+  nobody, such as `eth_chainId` — waits for the person to press Continue: Vela's address is never a link that sends
+  anyone somewhere without a click.
+- **No message signatures** (`personal_sign`, `eth_signTypedData_v4`): a signature is a credential (Sign-In with
+  Ethereum above all), and a fragment is carried along by any redirect at `return`. Sign messages in popup mode.
+  Answered `4200`.
+- **Nothing that changes a site's standing**: `wallet_revokePermissions`, `wallet_switchEthereumChain`,
+  `wallet_addEthereumChain` are answered `4200`. A redirect request runs on the chain the site is on in Vela (the one
+  it connected on); switch in popup mode.
+- **Not inside a popup.** A window that has an opener takes popup requests only; a redirect request pointed into it
+  is refused.
+- `state` is required: an answer you did not ask for must be thrown away.
+
+Your part: `return` should be an exact page of yours that handles the answer and **must not redirect onwards**
+(an open redirect there would carry the fragment to someone else).
 
 ## 5. Methods
 
@@ -173,13 +199,13 @@ the default and why `state` is required: an answer you did not ask for must be t
 | `wallet_requestPermissions` | Same as above | EIP-2255 permissions |
 | `eth_accounts` | No | `[address]`, or `[]` if not connected |
 | `wallet_getPermissions` | No | EIP-2255 permissions |
-| `wallet_revokePermissions` | No | `null`; the site is disconnected |
+| `wallet_revokePermissions` | No | `null`; the site is disconnected. Popup mode only |
 | `eth_chainId` | No | The chain this site is on, hex |
-| `wallet_switchEthereumChain` | No | `null`, or 4902 (§5.2) |
-| `wallet_addEthereumChain` | No | Same as switch, for a chain Vela has; 4902 otherwise |
+| `wallet_switchEthereumChain` | No | `null`, or 4902 (§5.2). Popup mode only |
+| `wallet_addEthereumChain` | No | Same as switch, for a chain Vela has; 4902 otherwise. Popup mode only |
 | `wallet_getCapabilities` | No | EIP-5792 capabilities (atomic batches on every chain Vela has) |
-| `personal_sign` | Yes, the signing sheet | Signature (§5.3) |
-| `eth_signTypedData_v4` | Yes | Signature (§5.3) |
+| `personal_sign` | Yes, the signing sheet | Signature (§5.3). Popup mode only |
+| `eth_signTypedData_v4` | Yes | Signature (§5.3). Popup mode only |
 | `eth_sendTransaction` | Yes | Transaction hash, once included |
 | `wallet_sendCalls` | Yes | EIP-5792 batch id (`{id}` for version `"2.0.0"`) |
 | `wallet_getCallsStatus` | No | EIP-5792 status of a batch this window's site sent |
@@ -187,8 +213,9 @@ the default and why `state` is required: an answer you did not ask for must be t
 Anything else is refused with `4200`. Vela Connect is not a node: read the chain with your own RPC.
 `eth_sign` is always refused.
 
-Every method except `eth_requestAccounts`, `wallet_requestPermissions`, `eth_accounts`, `eth_chainId`,
-`wallet_getPermissions` and `wallet_getCapabilities` needs the site to be connected first (`4100` otherwise).
+Signatures, transactions and batches (`personal_sign`, `eth_signTypedData_v4`, `eth_sendTransaction`,
+`wallet_sendCalls`) need the site to be connected first (`4100` otherwise); so does `wallet_getCapabilities` for an
+address. `eth_accounts` answers `[]` to a site that is not connected.
 
 ### 5.1 The account
 

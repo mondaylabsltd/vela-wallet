@@ -43,9 +43,12 @@ export class VelaPopup {
 		/** @type {Window | null} */
 		this.window = null;
 		this.ready = false;
+		this.sawReady = false;
 		this.pending = new Map(); // id → { method, params, resolve, reject }
 		this.nextId = 1;
 		this.onMessage = this.onMessage.bind(this);
+		// Leaving this page closes Vela: nothing is asked of the person for a page that is gone (§3.5).
+		window.addEventListener('pagehide', () => this.window?.close());
 	}
 
 	/**
@@ -58,10 +61,13 @@ export class VelaPopup {
 			this.window.focus();
 			return true;
 		}
-		const opened = window.open(`${this.origin}/dapp`, 'vela-connect', 'popup,width=420,height=720');
+		// A name of its own: no other page can re-point this window by name (§3.1).
+		const name = `vela-${crypto.randomUUID()}`;
+		const opened = window.open(`${this.origin}/dapp`, name, 'popup,width=420,height=720');
 		if (!opened) return false;
 		this.window = opened;
 		this.ready = false;
+		this.sawReady = false;
 		window.addEventListener('message', this.onMessage);
 		// No `ready` in time: Vela did not load (§3.2).
 		this.readyTimer = setTimeout(() => {
@@ -107,11 +113,20 @@ export class VelaPopup {
 		const message = event.data;
 		if (!message || message.vela !== 1) return;
 		if (message.type === 'ready') {
-			// First ready, or ready again after the person created a wallet:
-			// send everything not answered yet (§3.2). Vela never answers an id twice.
+			// First ready, or ready again after the window reloaded (the person
+			// created a wallet): send what is not answered yet (§3.2). Vela never
+			// answers an id twice. A payment is never sent twice: one asked before
+			// a reload may have gone out, so it is unknown — check, then ask again.
+			const again = this.sawReady;
 			this.ready = true;
+			this.sawReady = true;
 			clearTimeout(this.readyTimer);
-			for (const id of this.pending.keys()) this.post(id);
+			for (const [id, waiting] of this.pending) {
+				if (again && SENDING.has(waiting.method)) {
+					this.pending.delete(id);
+					waiting.reject(new VelaError(4900, 'Vela reloaded before answering — the payment may have been sent; check before retrying'));
+				} else this.post(id);
+			}
 			return;
 		}
 		if (message.type === 'response') {

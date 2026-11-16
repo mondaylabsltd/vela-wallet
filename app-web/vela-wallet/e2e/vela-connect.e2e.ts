@@ -463,6 +463,77 @@ test.describe('Vela Connect', () => {
 		await context.close();
 	});
 
+	test('security: a window a site opened refuses a redirect request pointed into it', async ({
+		browser,
+		baseURL
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		await enterWallet(context);
+		const site = await openSite(context, baseURL!);
+		const fragment = new URLSearchParams({
+			request: Buffer.from(JSON.stringify({ method: 'eth_requestAccounts' })).toString('base64url'),
+			return: 'https://evil.example/',
+			state: 'abcdefghijklmnopqrst'
+		});
+		const opened = context.waitForEvent('page');
+		await site.evaluate((url) => window.open(url, 'x'), `${baseURL}/dapp#${fragment}`);
+		const popup = await opened;
+		await expect(popup.getByText(en('connect.velaConnect.badLinkTitle'))).toBeVisible({
+			timeout: 60_000
+		});
+		await context.close();
+	});
+
+	test('security: a redirect to a site never connected does not go there without a click', async ({
+		browser
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		const wallet = await enterWallet(context);
+		const fragment = new URLSearchParams({
+			request: Buffer.from(JSON.stringify({ method: 'eth_chainId' })).toString('base64url'),
+			return: 'https://evil.example/landing',
+			state: 'abcdefghijklmnopqrst'
+		});
+		await wallet.goto(`/en/dapp#${fragment}`);
+		await expect(wallet.getByTestId('connect-unverified')).toContainText('evil.example', {
+			timeout: 60_000
+		});
+		await wallet.waitForTimeout(1_500);
+		expect(new URL(wallet.url()).host).not.toBe('evil.example');
+		await context.close();
+	});
+
+	test('security: redirect mode signs no messages — they need the popup', async ({
+		browser,
+		baseURL
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		await enterWallet(context);
+		const site = await openSite(context, baseURL!);
+		const popup = await clickOpening(context, site, 'connect');
+		await popup.getByRole('button', { name: 'Connect', exact: true }).click();
+		await answerFor(site, 'connect');
+		await popup.close();
+
+		// Connected, so the refusal comes straight back — and nothing was shown to sign.
+		await site.evaluate(
+			([wallet, account]) =>
+				import('./vela-connect.js').then((m) =>
+					m.redirectToVela({ method: 'personal_sign', params: ['0x48656c6c6f', account], wallet })
+				),
+			[baseURL!, FIXTURE_ONE] as const
+		);
+		await site.waitForURL(/\/dapp/, { timeout: 60_000 });
+		await site.waitForURL(new RegExp(`^${DAPP}`), { timeout: 60_000 });
+		const answer = await answerFor(site, 'redirect');
+		expect(answer.code).toBe(4200);
+		expect(answer.message).toContain('popup mode');
+		await context.close();
+	});
+
 	test('a link that is not a Vela Connect request says so and sends nothing', async ({ page }) => {
 		await denyOffOrigin(page);
 		await page.goto(

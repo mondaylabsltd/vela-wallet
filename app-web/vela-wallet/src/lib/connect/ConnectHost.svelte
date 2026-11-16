@@ -48,7 +48,7 @@
 		publishExtChains,
 		setExtAccountChains
 	} from '#lib/dapp/core/ext-chains.ts';
-	import { originHasOwnChain } from '#lib/dapp/grants.ts';
+	import { getGrant, originHasOwnChain } from '#lib/dapp/grants.ts';
 	import { loadCore } from '#lib/core/client.ts';
 	import { popupCloseSettlement } from '#lib/dapp/core/dperm-connect.ts';
 	import { dpermRejectMessage } from '#lib/dapp/core/dperm-types.ts';
@@ -72,7 +72,7 @@
 	} from './channel';
 	import type { ConnectMessages } from './messages';
 	import { batchIdOf, rememberOp } from './ops';
-	import type { WireAnswer } from './protocol';
+	import { readRedirect, redirectRefusal, type WireAnswer } from './protocol';
 
 	interface Props {
 		messages: ConnectMessages;
@@ -152,32 +152,56 @@
 		);
 	}
 
+	/**
+	 * A redirect's answer that needed nobody, held: the site it goes to is not
+	 * one the person connected, so going there waits for the person's Continue
+	 * (security review 2026-11-17: the wallet's address must not be a link that
+	 * sends anyone anywhere without a click).
+	 */
+	let heldAnswer = $state.raw<{ request: ChannelRequest; answer: WireAnswer } | null>(null);
+
 	/** Send `request`'s answer. */
 	const answerTo =
 		(request: ChannelRequest): Answerer =>
-		async (_rid, answer) =>
-			(await channel?.answer(request.rid, answer)) ?? false;
+		async (_rid, answer) => {
+			if (channel?.kind === 'redirect' && !unverifiedSeen && !(await getGrant(request.origin))) {
+				heldAnswer = { request, answer };
+				stage = { kind: 'unverified' };
+				return true;
+			}
+			return (await channel?.answer(request.rid, answer)) ?? false;
+		};
 
 	async function send(request: ChannelRequest, answer: WireAnswer): Promise<boolean> {
 		return answerTo(request)(request.rid, answer);
 	}
 
 	onMount(() => {
-		const opened = RedirectChannel.open(location.hash);
-		if (opened === 'invalid') {
-			stage = { kind: 'badlink' };
-			return;
-		}
-		if (opened) {
+		if (PopupChannel.available()) {
+			// A window a site opened takes requests from that site alone. A
+			// redirect request arriving in it — another page re-pointing the
+			// window by its name — is refused, never served under the pin.
+			const fragment = readRedirect(location.hash);
+			if (fragment.ok || fragment.reason === 'invalid') {
+				stage = { kind: 'badlink' };
+				return;
+			}
+			RedirectChannel.forget();
+			channel = new PopupChannel();
+		} else {
+			const opened = RedirectChannel.open(location.hash);
+			if (opened === 'invalid') {
+				stage = { kind: 'badlink' };
+				return;
+			}
+			if (!opened) {
+				stage = { kind: 'direct' };
+				return;
+			}
 			// The request is kept in this window's storage: the fragment goes, so
 			// a reload or a shared screenshot of the address bar carries nothing.
 			void replaceUrl(location.pathname + location.search);
 			channel = opened;
-		} else if (PopupChannel.available()) {
-			channel = new PopupChannel();
-		} else {
-			stage = { kind: 'direct' };
-			return;
 		}
 		const live = channel;
 		stage = { kind: 'idle', answered: false };
@@ -199,10 +223,17 @@
 		};
 	});
 
+	/** Requests taken, not yet answered or queued: owed an answer if the window goes. */
+	// Not reactive state: nothing on screen reads it.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const routing = new Set<ChannelRequest>();
+
 	/** A request arrived: answer it, or queue it for a person. */
 	function arrive(request: ChannelRequest): void {
+		routing.add(request);
 		instantChain = instantChain
 			.then(() => route(request))
+			.finally(() => routing.delete(request))
 			.catch((error) => {
 				console.warn('[connect] request failed:', error);
 				void send(request, {
@@ -217,15 +248,15 @@
 	async function route(request: ChannelRequest): Promise<void> {
 		await Promise.all([session.settled(), loadCore()]);
 		await publishFacts();
-		const handling = await handle(
-			request,
-			request.origin,
-			signedIn() ? session.view.address : null
-		);
+		const refused = channel?.kind === 'redirect' ? redirectRefusal(request.method) : null;
+		const handling = refused
+			? ({ kind: 'answer', answer: { error: { code: 4200, message: refused } } } as const)
+			: await handle(request, request.origin, signedIn() ? session.view.address : null);
 		if (handling.kind === 'answer') {
 			await send(request, handling.answer);
-			if (channel?.kind === 'redirect') stage = { kind: 'returning' };
-			else if (!current && stage.kind === 'idle') stage = { kind: 'idle', answered: true };
+			if (channel?.kind === 'redirect') {
+				if (!heldAnswer) stage = { kind: 'returning' };
+			} else if (!current && stage.kind === 'idle') stage = { kind: 'idle', answered: true };
 			return;
 		}
 		queue.push(request);
@@ -483,7 +514,11 @@
 			}
 			void send(owed, answer);
 		}
-		for (const waiting of queue.splice(0)) void send(waiting, { error: { ...CLOSED_UNDECIDED } });
+		// Queued, or still being read (never shown): nothing was signed or sent.
+		for (const waiting of [...queue.splice(0), ...routing]) {
+			if (waiting !== owed) void send(waiting, { error: { ...CLOSED_UNDECIDED } });
+		}
+		routing.clear();
 		current = null;
 	}
 
@@ -511,17 +546,34 @@
 	}
 
 	async function onDecline(): Promise<void> {
+		const declined = { error: { code: 4001, message: 'User rejected the request' } };
+		const held = heldAnswer;
+		if (held) {
+			// A redirect's answer the person would not follow: they declined.
+			heldAnswer = null;
+			unverifiedSeen = true;
+			stage = { kind: 'returning' };
+			await send(held.request, declined);
+			return;
+		}
 		const request = current;
 		if (!request || busy) return;
 		busy = true;
-		await finish(request, { error: { code: 4001, message: 'User rejected the request' } });
+		await finish(request, declined);
 	}
 
 	function onContinueUnverified(): void {
+		unverifiedSeen = true;
+		const held = heldAnswer;
+		if (held) {
+			heldAnswer = null;
+			stage = { kind: 'returning' };
+			void send(held.request, held.answer);
+			return;
+		}
 		const request = current;
 		const ruled = heldRuling;
 		if (!request || !ruled) return;
-		unverifiedSeen = true;
 		heldRuling = null;
 		void carryOut(request, ruled);
 	}
@@ -615,7 +667,7 @@
 					{rm.cancel}
 				</Button>
 			</div>
-		{:else if stage.kind === 'unverified' && current}
+		{:else if stage.kind === 'unverified' && (current || heldAnswer)}
 			<h1>{m.unverifiedTitle}</h1>
 			<p class="body" data-testid="connect-unverified">{fill(m.unverifiedBody)}</p>
 			<div class="actions">

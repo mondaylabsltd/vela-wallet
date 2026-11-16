@@ -217,3 +217,34 @@ export function redirectBack(returnUrl: string, state: string, answer: WireAnswe
 	url.hash = `vela=${base64UrlEncodeJson(body)}`;
 	return url.toString();
 }
+
+/**
+ * Why redirect mode does not take `method`, or `null` when it does (spec 109,
+ * security review 2026-11-17). A redirect's requester is only what its link
+ * says, so:
+ *
+ *   - **no message signatures**: a signature is a credential (Sign-In with
+ *     Ethereum above all), and a redirect carries it in a URL fragment, which
+ *     a site's own open redirect passes on to anyone. Popup mode, where the
+ *     browser vouches for the requester, signs messages;
+ *   - **nothing that changes a site's standing without the person**: a link
+ *     must not disconnect a site, or move it to another network, by being
+ *     opened.
+ */
+export function redirectRefusal(method: string): string | null {
+	if (
+		method === 'personal_sign' ||
+		method === 'eth_sign' ||
+		method.startsWith('eth_signTypedData')
+	) {
+		return 'Message signatures need popup mode: a redirect cannot show who is asking';
+	}
+	if (
+		method === 'wallet_revokePermissions' ||
+		method === 'wallet_switchEthereumChain' ||
+		method === 'wallet_addEthereumChain'
+	) {
+		return `${method} needs popup mode: a link cannot change a site's connection`;
+	}
+	return null;
+}

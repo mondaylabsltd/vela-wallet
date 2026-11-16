@@ -176,22 +176,58 @@ export class RedirectChannel implements Channel {
 	 */
 	static open(
 		hash: string,
-		navigate: (url: string) => void = (url) => location.replace(url)
+		navigate: (url: string) => void = (url) => location.replace(url),
+		now = Date.now()
 	): RedirectChannel | 'invalid' | null {
 		let read = readRedirect(hash);
 		if (read.ok) {
 			// Kept as the site wrote it, and read again by the same rules when
-			// the window comes back from creating a wallet.
+			// the window comes back from creating a wallet — for as long as that
+			// takes, not for a link left behind and found later.
 			try {
-				session()?.setItem(CONNECT_REDIRECT_KEY, hash);
+				session()?.setItem(CONNECT_REDIRECT_KEY, JSON.stringify({ hash, at: now }));
 			} catch {
 				/* kept in the fragment only */
 			}
 		} else if (read.reason === 'none') {
-			read = readRedirect(session()?.getItem(CONNECT_REDIRECT_KEY) ?? '');
+			read = readRedirect(RedirectChannel.#kept(now));
+		} else {
+			RedirectChannel.forget();
 		}
 		if (read.ok) return new RedirectChannel(read.redirect, navigate);
 		return read.reason === 'invalid' ? 'invalid' : null;
+	}
+
+	/** The kept fragment, while it is fresh; `''` otherwise (and it is dropped). */
+	static #kept(now: number): string {
+		try {
+			const kept = JSON.parse(session()?.getItem(CONNECT_REDIRECT_KEY) ?? 'null') as {
+				hash?: unknown;
+				at?: unknown;
+			} | null;
+			if (
+				kept &&
+				typeof kept.hash === 'string' &&
+				typeof kept.at === 'number' &&
+				now - kept.at < CONNECT_RETURN_MS &&
+				now >= kept.at - 60_000
+			) {
+				return kept.hash;
+			}
+		} catch {
+			/* unreadable: none */
+		}
+		RedirectChannel.forget();
+		return '';
+	}
+
+	/** Drop a kept redirect request. */
+	static forget(): void {
+		try {
+			session()?.removeItem(CONNECT_REDIRECT_KEY);
+		} catch {
+			/* nothing kept */
+		}
 	}
 
 	get origin(): string {
@@ -206,11 +242,7 @@ export class RedirectChannel implements Channel {
 	async answer(_rid: string, answer: WireAnswer): Promise<boolean> {
 		if (this.#done) return false;
 		this.#done = true;
-		try {
-			session()?.removeItem(CONNECT_REDIRECT_KEY);
-		} catch {
-			/* nothing kept */
-		}
+		RedirectChannel.forget();
 		this.navigate(redirectBack(this.redirect.returnUrl, this.redirect.state, answer));
 		return true;
 	}

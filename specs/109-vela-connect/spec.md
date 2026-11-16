@@ -35,6 +35,22 @@ no wallet creates one in the same window. That is how users start: on the web.
 | B11 | **Vela Connect is not a node.** Read methods are refused (4200). | Sites have their own RPC; a wallet window must not become an open relay. |
 | B12 | **v1 serves Vela accounts, not multisigs.** | A multisig's message signature needs its members' approvals; the proposal flow is the extension's and the in-app browsers', and comes to this window later. |
 
+## Security review (2026-11-17)
+
+An independent adversarial review of the first build found no origin spoof in popup mode; its findings were in
+redirect mode and in the clients, and each is closed:
+
+| | Finding | Now |
+|---|---|---|
+| M1 | A redirect fragment pointed into a site's popup (re-pointed by its window name) was served, ignoring the pin. | A window with an opener takes popup requests only; a redirect request in it is a bad link. The examples and sub3 name the window randomly. |
+| M2 | An answer that needed nobody sent the person to `return` at once: the wallet's address was an open redirect. | Vela goes back on its own only to a site the person connected; otherwise the person presses Continue on the "Opened from a link" card first. |
+| M3 | A link could revoke a site's grant or move its network, unasked. | Redirect mode answers `wallet_revokePermissions` / `switch` / `addEthereumChain` 4200. |
+| M4 | A message signature from a redirect travels in a fragment, which an integrator's own open redirect hands on: a SIWE credential lost. | Redirect mode signs no messages (4200: popup mode only). PROTOCOL §4.3 tells integrators `return` must not redirect onwards. |
+| L1 | "Resend on ready" vs "never resend a payment"; a request still being read when the window went was dropped. | Clients resend no payment after a second `ready` (unknown instead); the window answers requests it was still reading on close (4001: nothing shown). |
+| L2 | A page that navigates away keeps its window. | Clients close Vela on `pagehide`; documented. |
+| L3 | A redirect request abandoned with Back could be replayed later. | Kept 30 minutes at most; dropped when refused. |
+| L4 | sub3's deployless check had no gas cap. | 5M cap; any execution failure is an invalid signature. |
+
 ## What was built
 
 - `docs/vela-connect/PROTOCOL.md` — the contract, frozen at v1. `docs/vela-connect/examples/` — `vela-connect.js`
