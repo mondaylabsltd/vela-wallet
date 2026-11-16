@@ -169,7 +169,7 @@ unicode-segmentation = "1"
 # The 32-byte software group-key seed, and CTAP2's PIN/UV key agreement. ALL
 # randomness in the flow lives in the shell — vela-core's ctap module takes the
 # shared secret as an input precisely so it can stay a pure function.
-getrandom = "0.3"
+getrandom = "0.4"
 p256 = { version = "0.13", features = ["ecdh"] }
 # The update download's SHA-256, taken as the bytes arrive rather than over
 # the whole file in memory afterwards. The version p256 already pulls.
