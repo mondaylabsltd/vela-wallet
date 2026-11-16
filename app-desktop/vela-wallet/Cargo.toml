@@ -170,7 +170,7 @@ unicode-segmentation = "1"
 # randomness in the flow lives in the shell — vela-core's ctap module takes the
 # shared secret as an input precisely so it can stay a pure function.
 getrandom = "0.3"
-p256 = { version = "0.13", features = ["ecdh"] }
+p256 = { version = "0.14", features = ["ecdh"] }
 # The update download's SHA-256, taken as the bytes arrive rather than over
 # the whole file in memory afterwards. The version p256 already pulls.
 sha2 = "0.10"
