@@ -63,3 +63,19 @@ pub(crate) use status_badge::glyph as badge_glyph;
 pub use status_badge::status_badge;
 pub use step_slider::{StepSlider, step_slider_picture};
 pub use windowed::Windowed;
+
+/// The operating system this build runs on, in gpui's terms.
+///
+/// gpui (from Zed v1.28.1) answers "which modifier is ⌘-or-Ctrl" and "how is
+/// a keystroke spelled" at run time, from `cx.platform_info()`, because one of
+/// its backends is a browser on any host. A native build's host is its
+/// compile target — gpui_macos, gpui_windows and gpui_linux each report
+/// exactly this — so it is the same answer for the code with no `App` in
+/// reach: `edit_chord`, and the tests that parse or spell keystrokes.
+pub const HOST_OS: gpui::OperatingSystem = if cfg!(target_os = "macos") {
+    gpui::OperatingSystem::Mac
+} else if cfg!(target_os = "windows") {
+    gpui::OperatingSystem::Windows
+} else {
+    gpui::OperatingSystem::Linux
+};

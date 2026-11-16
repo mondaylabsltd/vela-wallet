@@ -15,7 +15,7 @@ edition = "2024"
 # `wry/mac-proxy` is here for the same reason (spec 082): the in-app browser's
 # half of the `VELA_DEV_PROXY` fault-proxy switch (`executor/proxy.rs`). It
 # links Network.framework's proxy calls, which exist only from macOS 14, so a
-# release build (11+, Info.plist.in) must not carry it, and a `dev-fixtures`
+# release build (12+, Info.plist.in) must not carry it, and a `dev-fixtures`
 # build is for macOS 14+.
 dev-fixtures = ["vela-core/dev-fixtures", "wry/mac-proxy"]
 # Phase 4 (native parity, performance): the launch / frame / core-dispatch
@@ -38,20 +38,23 @@ update-test = []
 # dependency without `rev` means "whatever the default branch is the next time
 # someone runs `cargo update`", so the lockfile was the only thing holding the
 # commit and a routine update could silently pull hundreds of upstream commits
-# into a wallet. The rev is the one Cargo.lock already recorded, so pinning it
-# changed nothing that is built.
+# into a wallet. The commit is Zed v1.28.1's (the tag points at e8bc16ac…):
+# the same gpui as the Zed release, as the owner chose — a commit Zed shipped,
+# rather than the smallest move past the Apache-2.0 relicense of zlog/ztracing
+# (zed ac5af8b9) that closed G6 (docs/SECURITY-MODEL.md §13).
 #
 # EVERY zed git dependency must carry the SAME `rev` string — here (gpui,
-# gpui_platform) and in app-desktop/vendor/gpui_macos/Cargo.toml (gpui,
-# collections, gpui_util, media). Cargo treats `zed` and `zed?rev=…` as two
-# different sources, so one entry left without the rev pulls a second,
-# incompatible gpui. The `[patch."https://github.com/zed-industries/zed"]` at
-# the bottom of this file still applies: cargo matches a patch on the URL, not
-# on the rev. TO MOVE THE PIN: change all six revs together, refresh the
-# vendored gpui_macos from the new commit (its manifest says how), run
+# gpui_platform, and gpui again under [dev-dependencies]) and in
+# app-desktop/vendor/gpui_macos/Cargo.toml (gpui, gpui_apple, collections,
+# gpui_util, scheduler). Cargo treats `zed` and `zed?rev=…` as two different
+# sources, so one entry left without the rev pulls a second, incompatible
+# gpui. The `[patch."https://github.com/zed-industries/zed"]` at the bottom of
+# this file still applies: cargo matches a patch on the URL, not on the rev.
+# TO MOVE THE PIN: change all eight revs together, refresh the vendored
+# gpui_macos from the new commit (its manifest says how), run
 # `cargo update -p gpui`, and review the upstream diff — deny.toml's
 # [sources] lists this repository as an allowed git source for that reason.
-gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "e8bc16acee5ae1937600d571d441c4b5d7b0d288" }
 # `wayland` and `x11` are NOT optional extras. gpui_linux defaults to both, but
 # Zed's workspace pins it `default-features = false`, so a git dependency
 # inherits neither and every run dies in gpui_linux/src/linux.rs at
@@ -60,7 +63,7 @@ gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e
 # made at runtime from WAYLAND_DISPLAY, so dropping x11 would leave an X session
 # with no backend. The features are inert on macOS and Windows, where
 # gpui_linux is not a dependency at all.
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0", features = [
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "e8bc16acee5ae1937600d571d441c4b5d7b0d288", features = [
     "font-kit",
     "wayland",
     "x11",
@@ -153,6 +156,11 @@ ureq = { version = "3.4", features = [
 rustls = { version = "0.23", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The error type of gpui's `HttpClient` trait, which the logo client
+# (`executor/gpui_http.rs`) implements. gpui's `http_client` re-exported it up
+# to the old pin; at Zed v1.28.1 it no longer does. The copy gpui already
+# builds, so nothing new is fetched.
+anyhow = "1"
 # The text wells' caret moves by grapheme cluster and by word (UAX #29) — an
 # emoji with a skin tone, a flag, an é typed as e + ´ are one step, as they
 # are in every other editor. Already in the tree through gpui; named here.
@@ -439,7 +447,7 @@ k256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "all
 # Enter and a moved clock (`ui::hold_confirm`'s keyboard test). The SAME rev
 # as [dependencies] (see the note there); only the feature is added, and only
 # for test builds.
-gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0", features = ["test-support"] }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "e8bc16acee5ae1937600d571d441c4b5d7b0d288", features = ["test-support"] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than
@@ -486,20 +494,16 @@ opt-level = 3
 opt-level = 3
 
 # Spec 095: gpui_macos without the private API the Mac App Store refuses
-# (`CGSSetWindowBackgroundBlurRadius`, `_windowResize…Cursor`,
-# `_opaqueRectForWindowMoveWhenInTitlebar`). The vendored crate is upstream at
-# the pinned commit minus exactly those; its Cargo.toml says why, what changed
-# and how to refresh it. `scripts/check-macos-private-api.sh` proves the
-# release binary clean. Remove this block with the vendored copy once upstream
-# no longer links private API.
+# (`_windowResize…Cursor`, `_opaqueRectForWindowMoveWhenInTitlebar`,
+# `_zoomFill:`, `_windowRestorationOptions`; the first copy also removed
+# `CGSSetWindowBackgroundBlurRadius`, gone upstream since). The vendored crate
+# is upstream at the pinned commit minus exactly those; its Cargo.toml says
+# why, what changed and how to refresh it. `scripts/check-store-binary.sh`
+# proves the release binary clean. Remove this block with the vendored copy
+# once upstream no longer links private API.
 [patch."https://github.com/zed-industries/zed"]
 gpui_macos = { path = "../vendor/gpui_macos" }
 
-# R22 follow-up (r22-5): gpui's `test-support` (the dev-dependency above,
-# test builds only) pulls `proptest`, which Zed's workspace pins to a git
-# commit — a source deny.toml does not allow (`unknown-git = "deny"`). The
-# crates.io release the lock already carries (alloy-primitives, ruint and
-# const-hex name it) stands in for it: no new source, and nothing in any
-# shipped artifact.
-[patch."https://github.com/proptest-rs/proptest"]
-proptest = "1.10.0"
+# (R22 follow-up r22-5 patched `proptest` here: at the old pin Zed's workspace
+# took it from git, a source deny.toml does not allow. Zed v1.28.1 takes the
+# crates.io release, so the patch went with that pin.)

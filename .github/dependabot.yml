@@ -87,7 +87,8 @@ updates:
       # Git dependencies pinned to a commit (deny.toml: required-git-spec =
       # "rev"). Moving gpui means refreshing app-desktop/vendor/gpui_macos
       # from the new commit and re-running the private-API check
-      # (scripts/check-macos-private-api.sh) — a person's PR, not a bot's.
+      # (app-desktop/vela-wallet/scripts/check-store-binary.sh) — a person's PR,
+      # not a bot's.
       - dependency-name: "gpui"
       - dependency-name: "gpui_platform"
       # Pinned to the exact versions wry resolves (Cargo.toml: "Bump the

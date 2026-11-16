@@ -163,7 +163,7 @@ Installable packages are built from that directory, for x64 and ARM64:
 | Platform | Package | Command |
 | --- | --- | --- |
 | Windows 10/11 | Inno Setup installer | `./scripts/build-windows-installer.ps1` |
-| macOS 11+ | `.app` bundle | `./scripts/build-macos-app.sh` |
+| macOS 12+ | `.app` bundle | `./scripts/build-macos-app.sh` |
 | Fedora, RHEL, openSUSE | `.rpm` | `./scripts/build-linux-packages.sh --formats rpm` |
 | Debian, Ubuntu | `.deb` | `./scripts/build-linux-packages.sh --formats deb` |
 | Any Linux, sandboxed | Flatpak bundle | `./scripts/build-flatpak.sh` |

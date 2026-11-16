@@ -57,7 +57,7 @@ const GPUI_EVENTS: [&str; 8] = [
     "MouseDownEvent",
     "MouseUpEvent",
     "MouseMoveEvent",
-    "ScrollWheelEvent",
+    "ScrollEvent",
     "ModifiersChangedEvent",
 ];
 

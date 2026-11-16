@@ -956,7 +956,8 @@ mod tests {
     }
 
     fn key(spec: &str) -> Keystroke {
-        Keystroke::parse(spec).unwrap_or_else(|error| unreachable!("{spec}: {error}"))
+        Keystroke::parse_with_os(spec, crate::ui::HOST_OS)
+            .unwrap_or_else(|error| unreachable!("{spec}: {error}"))
     }
 
     /// Typing goes through the text-input road, as it does in the app.
