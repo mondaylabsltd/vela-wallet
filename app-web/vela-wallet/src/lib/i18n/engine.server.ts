@@ -30,6 +30,7 @@ import { INTRO_KEYS } from '#lib/intro/slides.ts';
 import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '#lib/flows/messages.ts';
 import type { ExploreMessages } from '#lib/explore/messages.ts';
 import type { RequestMessages } from '#lib/dapp/messages.ts';
+import { CONNECT_KEYS, type ConnectMessages } from '#lib/connect/messages.ts';
 import type { AgentMessages } from '#lib/agent/messages.ts';
 import type { NetworkSpaceMessages } from '#lib/network-space/messages.ts';
 import type { ExtensionMessages } from '#lib/extension/messages.ts';
@@ -1068,6 +1069,14 @@ export function rawResolve(locale: Locale, key: string): string {
  * browser's connect sheet and say the right thing wherever a request arrives
  * from — one corpus, not one per surface.
  */
+/** Vela Connect's window (spec 109): what it says around the request. */
+export function resolveConnectMessages(locale: Locale): ConnectMessages {
+	activate(locale);
+	return Object.fromEntries(
+		Object.entries(CONNECT_KEYS).map(([name, key]) => [name, t(locale, key)])
+	) as ConnectMessages;
+}
+
 export function resolveRequestMessages(locale: Locale): RequestMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);

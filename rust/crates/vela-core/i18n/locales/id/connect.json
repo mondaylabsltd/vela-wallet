@@ -140,6 +140,23 @@
       "openInPanelTitle": "Vela terbuka di panel samping",
       "openInPanelBody": "Satu dompet per jendela: tab ini mengalah selama panel samping dipakai. Semua di sini tetap seperti yang Anda tinggalkan.",
       "goToPanel": "Buka panel samping"
+    },
+    "velaConnect": {
+      "doneTitle": "Kembali ke {{host}}",
+      "doneBody": "Vela sudah menjawab {{host}}. Anda bisa menutup jendela ini dan melanjutkan di sana.",
+      "close": "Tutup jendela",
+      "goneTitle": "{{host}} sudah tidak terbuka",
+      "goneBody": "Tidak ada lagi yang akan diminta di jendela ini. Yang sudah Anda setujui ada di aktivitas Anda.",
+      "directTitle": "Tidak ada yang perlu disetujui",
+      "directBody": "Aplikasi yang bekerja dengan Vela membuka jendela ini saat meminta sesuatu dari Anda. Untuk memakai dompet Anda, buka Vela.",
+      "openWallet": "Buka Vela",
+      "badLinkTitle": "Tautan ini tidak bisa dipakai",
+      "badLinkBody": "Tautan tidak lengkap, atau bukan permintaan yang dipahami Vela. Tidak ada yang dibagikan atau ditandatangani.",
+      "unverifiedTitle": "Dibuka dari tautan",
+      "unverifiedBody": "Vela tidak bisa memastikan bahwa {{host}} yang mengirim Anda ke sini. Apa pun yang Anda setujui hanya kembali ke {{host}}, jadi lanjutkan hanya jika Anda datang dari sana.",
+      "continueLabel": "Lanjutkan",
+      "returning": "Kembali ke {{host}}…",
+      "spaceAsk": "{{host}} ingin menggunakan {{network}}."
     }
   },
   "signHandoff": {

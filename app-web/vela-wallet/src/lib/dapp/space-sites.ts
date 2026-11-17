@@ -24,6 +24,7 @@
  * Off the extension there is no `chrome.storage.local`, so there are no grants
  * and every function here does nothing.
  */
+import { dappArea } from './area';
 import { CHAIN_PREFIX, PERM_PREFIX, SPACE_SITES_KEY } from './keys';
 
 interface StorageAreaLike {
@@ -33,9 +34,7 @@ interface StorageAreaLike {
 }
 
 function area(): StorageAreaLike | null {
-	const local = (globalThis as { chrome?: { storage?: { local?: unknown } } }).chrome?.storage
-		?.local;
-	return (local as StorageAreaLike | undefined) ?? null;
+	return dappArea() as StorageAreaLike | null;
 }
 
 function isSiteKey(key: string): boolean {

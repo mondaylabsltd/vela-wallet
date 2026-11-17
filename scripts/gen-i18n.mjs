@@ -1461,10 +1461,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   NFT moves, the approvals it found and a log naming the account Vela
 //   could not read, each drawn as its own balance row (never "No asset
 //   changes"). 2330 + 4 = 2334 paths, 2210 leaves.
-if (PATHS.length !== 2334) fail(`expected 2334 paths (2210 leaf + 124 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2210) fail(`expected 2210 leaf paths, got ${leafSet.size}`);
+// 2349 (spec 109, Vela Connect, 2026-11-17): + the branch
+//   `connect.velaConnect` and its 14 leaves — the web wallet's window a site
+//   opens (`wallet.getvela.app/dapp`): answered (`doneTitle`, `doneBody`,
+//   `close`), the site gone (`goneTitle`, `goneBody`), opened with nothing to
+//   ask (`directTitle`, `directBody`, `openWallet`), a redirect link that
+//   cannot be read (`badLinkTitle`, `badLinkBody`), a redirect's requester it
+//   cannot confirm (`unverifiedTitle`, `unverifiedBody`, `continueLabel`) and
+//   the way back (`returning`). 2334 + 14 + 1 = 2349 paths, 2224 leaves,
+//   125 branches.
+// 2350 (spec 109, the same day): + `connect.velaConnect.spaceAsk` — a site
+//   asks for a network of the other space, and the window offers the switch
+//   ("{{host}} wants to use {{network}}.", over the spaces' own switch
+//   words). 2349 + 1 = 2350 paths, 2225 leaves.
+if (PATHS.length !== 2350) fail(`expected 2350 paths (2225 leaf + 125 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2225) fail(`expected 2225 leaf paths, got ${leafSet.size}`);
 
-if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
+if (branchSet.size !== 125) fail(`expected 125 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

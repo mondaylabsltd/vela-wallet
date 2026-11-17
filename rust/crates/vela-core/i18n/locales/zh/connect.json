@@ -140,6 +140,23 @@
       "openInPanelTitle": "Vela 已在侧边栏中打开",
       "openInPanelBody": "一个窗口只开一个钱包：使用侧边栏期间，此标签页会让位。这里的内容会原样保留。",
       "goToPanel": "前往侧边栏"
+    },
+    "velaConnect": {
+      "doneTitle": "返回 {{host}}",
+      "doneBody": "Vela 已回复 {{host}}。你可以关闭此窗口，回到那里继续。",
+      "close": "关闭窗口",
+      "goneTitle": "{{host}} 已关闭",
+      "goneBody": "此窗口不会再有新的请求。你已批准的操作都在动态记录里。",
+      "directTitle": "没有需要批准的内容",
+      "directBody": "接入了 Vela 的应用在需要你确认时，会打开此窗口。要使用钱包，请直接打开 Vela。",
+      "openWallet": "打开 Vela",
+      "badLinkTitle": "此链接无法使用",
+      "badLinkBody": "链接不完整，或不是 Vela 能识别的请求。没有分享或签署任何内容。",
+      "unverifiedTitle": "通过链接打开",
+      "unverifiedBody": "Vela 无法确认是 {{host}} 让你来到这里。你批准的任何内容只会返回给 {{host}}，请只在确实从那里过来时继续。",
+      "continueLabel": "继续",
+      "returning": "正在返回 {{host}}…",
+      "spaceAsk": "{{host}} 想使用 {{network}}。"
     }
   },
   "signHandoff": {

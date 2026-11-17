@@ -2147,3 +2147,73 @@ export function dappAddOutcomeError(
 		message: string;
 	} | null;
 }
+
+/**
+ * Who answers a site's request (`dapp_rpc::classify`) — an allowlist: a
+ * method it does not name is `unsupported`, never forwarded. Vela Connect
+ * (spec 109) routes every request it takes through this.
+ */
+export type DappRoute =
+	| { type: 'connect' }
+	| { type: 'accounts' }
+	| { type: 'coinbase' }
+	| { type: 'permissions' }
+	| { type: 'revoke_permissions' }
+	| { type: 'chain_id' }
+	| { type: 'net_version' }
+	| { type: 'switch_chain' }
+	| { type: 'add_chain' }
+	| { type: 'watch_asset' }
+	| { type: 'sign' }
+	| { type: 'capabilities' }
+	| { type: 'calls_status' }
+	| { type: 'read'; bundler: boolean }
+	| { type: 'unsupported' };
+
+export function dappRpcClassify(method: string): DappRoute {
+	return JSON.parse(wasm.dappRpcClassify(method)) as DappRoute;
+}
+
+/**
+ * EIP-5792 `wallet_getCapabilities` for the site's granted addresses on the
+ * wallet's chains (`dapp_rpc::capabilities`).
+ */
+export function dappRpcCapabilities(
+	params: unknown[],
+	granted: string[],
+	chainIds: number[]
+): { result: unknown } | { error: { code: number; message: string } } {
+	return JSON.parse(
+		wasm.dappRpcCapabilities(
+			JSON.stringify(params),
+			JSON.stringify(granted),
+			JSON.stringify(chainIds)
+		)
+	) as { result: unknown } | { error: { code: number; message: string } };
+}
+
+/** The batch id a `wallet_getCallsStatus` asks about, lower-cased, or `null`. */
+export function dappRpcCallsStatusId(params: unknown[]): string | null {
+	return wasm.dappRpcCallsStatusId(JSON.stringify(params)) ?? null;
+}
+
+/**
+ * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chainId`, from
+ * the bundler's receipt of its operation (`null`: not landed) and, with no
+ * receipt, the relay's status of it (`dapp_rpc::calls_status`).
+ */
+export function dappRpcCallsStatus(
+	id: string,
+	chainId: number,
+	receipt: unknown,
+	relayStatus: unknown
+): unknown {
+	return JSON.parse(
+		wasm.dappRpcCallsStatus(
+			id,
+			chainId,
+			receipt === null || receipt === undefined ? null : JSON.stringify(receipt),
+			relayStatus === null || relayStatus === undefined ? null : JSON.stringify(relayStatus)
+		)
+	);
+}

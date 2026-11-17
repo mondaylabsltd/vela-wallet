@@ -41,6 +41,24 @@ export interface WalletFacts {
 	addresses: string[] | null;
 }
 
+/**
+ * What a request has to say for the core to rule on it — the extension's
+ * `ExtensionRequest` and Vela Connect's (spec 109) both do.
+ */
+type RequestCore = 'rid' | 'id' | 'method' | 'params' | 'origin';
+export type DappRequestIn = Pick<ExtensionRequest, RequestCore> &
+	Partial<Omit<ExtensionRequest, RequestCore>>;
+
+/**
+ * Where an answer goes: the extension's worker (`answerRequest`, the default)
+ * or, for Vela Connect, the page that opened the window. `true` when the page
+ * took it.
+ */
+export type Answerer = (
+	rid: string,
+	answer: { result?: unknown; error?: { code: number; message: string; data?: unknown } }
+) => Promise<boolean>;
+
 /** What the window should show once the core has ruled. */
 export type RequestStage =
 	| { kind: 'loading' }
@@ -69,8 +87,9 @@ export type RequestStage =
  * sent by the time this resolves.
  */
 export async function evaluate(
-	request: ExtensionRequest,
-	wallet: WalletFacts
+	request: DappRequestIn,
+	wallet: WalletFacts,
+	answer: Answerer = answerRequest
 ): Promise<RequestStage> {
 	await loadCore();
 	const grant = await getGrant(request.origin);
@@ -88,12 +107,12 @@ export async function evaluate(
 
 	switch (verdict.outcome.type) {
 		case 'respond':
-			await answerRequest(request.rid, { result: encode(verdict.outcome.payload) });
+			await answer(request.rid, { result: encode(verdict.outcome.payload) });
 			return { kind: 'done' };
 
 		case 'reject': {
 			const message = dpermRejectMessage(verdict.outcome.reason);
-			await answerRequest(request.rid, {
+			await answer(request.rid, {
 				error: { code: verdict.outcome.code, message }
 			});
 			return { kind: 'refused', code: verdict.outcome.code, message };
@@ -122,13 +141,14 @@ export async function evaluate(
  * card with both buttons still working.
  */
 export async function approve(
-	request: ExtensionRequest,
+	request: DappRequestIn,
 	wallet: WalletFacts,
 	chainId: number,
 	// Spec 082 RB5: is the page still there? Asked before the grant is
 	// written — a connection granted to a page that already left is a grant
 	// nobody asked for. Absent → always yes (a caller with no asker to lose).
-	claim?: () => Promise<boolean>
+	claim?: () => Promise<boolean>,
+	answer: Answerer = answerRequest
 ): Promise<void> {
 	if (claim && !(await claim())) throw new AskerGoneError('approve');
 	await loadCore();
@@ -154,7 +174,7 @@ export async function approve(
 	// that lists it is Phase 6's; writing it is not optional, because a
 	// connection nobody can see is a connection nobody can revoke.
 	await saveConnectionRecord(plan.record);
-	await answerRequest(request.rid, { result: encode(plan.respond) });
+	await answer(request.rid, { result: encode(plan.respond) });
 }
 
 /** The EIP-1193 shape of what the core said to answer with. */

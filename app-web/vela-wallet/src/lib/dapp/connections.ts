@@ -9,6 +9,7 @@
  * `dapp_permissions`', and revoking is the absence of one. Nothing here decides
  * anything — it lists keys and removes them.
  */
+import { dappArea } from './area';
 import { PERM_PREFIX } from './keys';
 import { revokeGrant, type DAppGrant } from './grants';
 import { revokeSitesSetAside } from './space-sites';
@@ -19,9 +20,7 @@ interface StorageAreaLike {
 }
 
 function area(): StorageAreaLike | null {
-	const local = (globalThis as { chrome?: { storage?: { local?: unknown } } }).chrome?.storage
-		?.local;
-	return (local as StorageAreaLike | undefined) ?? null;
+	return dappArea() as StorageAreaLike | null;
 }
 
 /** Every granted origin, oldest grant first. Empty off the extension. */

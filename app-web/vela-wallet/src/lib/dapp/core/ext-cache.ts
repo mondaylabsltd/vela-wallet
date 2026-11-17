@@ -23,6 +23,7 @@
  * truth here — and `request_extension_sign` is acked. Answering beats skipping:
  * an unanswered effect stalls the loop.
  */
+import { dappArea } from '../area';
 import { ExtCacheCore, loadCore } from '#lib/core/client.ts';
 import type { Account } from '#lib/core/generated/Account.ts';
 import type { ExtCacheOperation } from '#lib/core/generated/ExtCacheOperation.ts';
@@ -115,9 +116,7 @@ interface StorageAreaLike {
 }
 
 function area(): StorageAreaLike | null {
-	const local = (globalThis as { chrome?: { storage?: { local?: unknown } } }).chrome?.storage
-		?.local;
-	return (local as StorageAreaLike | undefined) ?? null;
+	return dappArea() as StorageAreaLike | null;
 }
 
 async function write(snapshot: ExtSnapshot): Promise<void> {

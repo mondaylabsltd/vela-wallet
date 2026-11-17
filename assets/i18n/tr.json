@@ -1217,6 +1217,23 @@
    "openInPanelTitle": "Vela yan panelde açık",
    "openInPanelBody": "Her pencerede tek cüzdan: yan panel kullanılırken bu sekme geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
    "goToPanel": "Yan panele git"
+  },
+  "velaConnect": {
+   "doneTitle": "{{host}} sitesine dön",
+   "doneBody": "Vela, {{host}} sitesine yanıt verdi. Bu pencereyi kapatıp orada devam edebilirsin.",
+   "close": "Pencereyi kapat",
+   "goneTitle": "{{host}} artık açık değil",
+   "goneBody": "Bu pencerede başka bir şey istenmeyecek. Onayladıkların etkinliğinde yer alıyor.",
+   "directTitle": "Onaylanacak bir şey yok",
+   "directBody": "Vela ile çalışan uygulamalar senden bir şey istediklerinde bu pencereyi açar. Cüzdanını kullanmak için Vela’yı aç.",
+   "openWallet": "Vela’yı aç",
+   "badLinkTitle": "Bu bağlantı kullanılamıyor",
+   "badLinkBody": "Eksik ya da Vela’nın anladığı bir istek değil. Hiçbir şey paylaşılmadı veya imzalanmadı.",
+   "unverifiedTitle": "Bir bağlantıdan açıldı",
+   "unverifiedBody": "Vela, seni buraya {{host}} sitesinin gönderdiğini doğrulayamıyor. Onayladığın her şey yalnızca {{host}} sitesine döner; yalnızca oradan geldiysen devam et.",
+   "continueLabel": "Devam et",
+   "returning": "{{host}} sitesine dönülüyor…",
+   "spaceAsk": "{{host}}, {{network}} ağını kullanmak istiyor."
   }
  },
  "signHandoff": {

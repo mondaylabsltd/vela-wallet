@@ -1217,6 +1217,23 @@
    "openInPanelTitle": "Vela はサイドパネルで開いています",
    "openInPanelBody": "1 つのウィンドウに 1 つのウォレット。サイドパネルを使っている間、このタブは表示を控えます。ここの内容はそのまま残ります。",
    "goToPanel": "サイドパネルへ移動"
+  },
+  "velaConnect": {
+   "doneTitle": "{{host}} に戻る",
+   "doneBody": "Vela は {{host}} に応答しました。このウィンドウを閉じて、続きはそちらで行えます。",
+   "close": "ウィンドウを閉じる",
+   "goneTitle": "{{host}} はもう開いていません",
+   "goneBody": "このウィンドウで新たに求められることはありません。承認済みの内容はアクティビティにあります。",
+   "directTitle": "承認するものはありません",
+   "directBody": "Vela と連携するアプリは、あなたの確認が必要なときにこのウィンドウを開きます。ウォレットを使うには Vela を開いてください。",
+   "openWallet": "Vela を開く",
+   "badLinkTitle": "このリンクは使えません",
+   "badLinkBody": "リンクが不完全か、Vela が理解できるリクエストではありません。何も共有・署名されていません。",
+   "unverifiedTitle": "リンクから開かれました",
+   "unverifiedBody": "{{host}} があなたをここへ送ったことを Vela は確認できません。承認した内容は {{host}} にだけ返されます。そこから来た場合にのみ続けてください。",
+   "continueLabel": "続ける",
+   "returning": "{{host}} に戻っています…",
+   "spaceAsk": "{{host}} が {{network}} を使おうとしています。"
   }
  },
  "signHandoff": {

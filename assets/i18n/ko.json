@@ -1217,6 +1217,23 @@
    "openInPanelTitle": "Vela가 사이드 패널에서 열려 있습니다",
    "openInPanelBody": "창 하나에 지갑 하나: 사이드 패널을 쓰는 동안 이 탭은 물러나 있습니다. 여기 있던 내용은 그대로 남아 있습니다.",
    "goToPanel": "사이드 패널로 이동"
+  },
+  "velaConnect": {
+   "doneTitle": "{{host}}(으)로 돌아가기",
+   "doneBody": "Vela가 {{host}}에 응답했습니다. 이 창을 닫고 그곳에서 계속하세요.",
+   "close": "창 닫기",
+   "goneTitle": "{{host}}이(가) 더 이상 열려 있지 않습니다",
+   "goneBody": "이 창에서 더 이상 요청하지 않습니다. 이미 승인한 내용은 활동 내역에 있습니다.",
+   "directTitle": "승인할 항목이 없습니다",
+   "directBody": "Vela와 연동되는 앱은 확인이 필요할 때 이 창을 엽니다. 지갑을 사용하려면 Vela를 여세요.",
+   "openWallet": "Vela 열기",
+   "badLinkTitle": "이 링크는 사용할 수 없습니다",
+   "badLinkBody": "링크가 불완전하거나 Vela가 이해할 수 있는 요청이 아닙니다. 공유되거나 서명된 것은 없습니다.",
+   "unverifiedTitle": "링크로 열림",
+   "unverifiedBody": "{{host}}이(가) 이곳으로 보냈는지 Vela는 확인할 수 없습니다. 승인한 내용은 {{host}}(으)로만 돌아가므로, 그곳에서 왔을 때만 계속하세요.",
+   "continueLabel": "계속",
+   "returning": "{{host}}(으)로 돌아가는 중…",
+   "spaceAsk": "{{host}}에서 {{network}}을(를) 사용하려고 합니다."
   }
  },
  "signHandoff": {

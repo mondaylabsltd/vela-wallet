@@ -8,6 +8,12 @@
  */
 import type { Locator, Page, Route } from '@playwright/test';
 
+/**
+ * What a stub needs: somewhere to route. A `Page`, or a `BrowserContext` —
+ * whose routes also cover the windows its pages open (Vela Connect's popup).
+ */
+export type Routable = Pick<Page, 'route'>;
+
 export type RpcHandler = (method: string, params: unknown[], url: string) => unknown | undefined;
 
 /**
@@ -15,7 +21,7 @@ export type RpcHandler = (method: string, params: unknown[], url: string) => unk
  * any page.goto: silence about a missed stub must be a failed request, never
  * a live call escaping CI.
  */
-export async function denyOffOrigin(page: Page): Promise<void> {
+export async function denyOffOrigin(page: Routable): Promise<void> {
 	await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route) => route.abort('failed'));
 }
 
@@ -108,7 +114,7 @@ function witnessedDoc(doc: Record<string, unknown>): Record<string, unknown> {
  * (the background reads: a JSON-RPC "method not found", see above).
  */
 export async function stubJsonRpc(
-	page: Page,
+	page: Routable,
 	urlPattern: RegExp,
 	handle: RpcHandler
 ): Promise<void> {
@@ -275,7 +281,7 @@ export async function seedNetworkOverrides(
  * given document or 404; the search index answers empty.
  */
 export async function stubChainRegistry(
-	page: Page,
+	page: Routable,
 	docs: Record<number, Record<string, unknown> | null>
 ): Promise<void> {
 	await page.route(/\/chains\/eip155-(\d+)\.json$/, (route) => {
@@ -321,7 +327,7 @@ export interface RelayRestAnswers {
  * landed. Register this AFTER `stubJsonRpc` so the relay's origin wins.
  */
 export async function stubRelay(
-	page: Page,
+	page: Routable,
 	urlPattern: RegExp,
 	handler: RelayHandler,
 	rest: RelayRestAnswers = {}

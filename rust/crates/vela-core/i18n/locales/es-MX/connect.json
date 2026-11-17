@@ -140,6 +140,23 @@
       "openInPanelTitle": "Vela está abierta en el panel lateral",
       "openInPanelBody": "Una billetera por ventana: esta pestaña se hace a un lado mientras usas el panel lateral. Aquí todo queda como lo dejaste.",
       "goToPanel": "Ir al panel lateral"
+    },
+    "velaConnect": {
+      "doneTitle": "Volver a {{host}}",
+      "doneBody": "Vela ya respondió a {{host}}. Puedes cerrar esta ventana y continuar allí.",
+      "close": "Cerrar ventana",
+      "goneTitle": "{{host}} ya no está abierto",
+      "goneBody": "En esta ventana no se pedirá nada más. Lo que ya aprobaste está en tu actividad.",
+      "directTitle": "Nada que aprobar",
+      "directBody": "Las apps que funcionan con Vela abren esta ventana cuando te piden algo. Para usar tu billetera, abre Vela.",
+      "openWallet": "Abrir Vela",
+      "badLinkTitle": "Este enlace no se puede usar",
+      "badLinkBody": "Está incompleto o no es una solicitud que Vela entienda. No se compartió ni firmó nada.",
+      "unverifiedTitle": "Abierto desde un enlace",
+      "unverifiedBody": "Vela no puede confirmar que {{host}} te envió aquí. Lo que apruebes solo regresa a {{host}}, así que continúa solo si vienes de ahí.",
+      "continueLabel": "Continuar",
+      "returning": "Volviendo a {{host}}…",
+      "spaceAsk": "{{host}} quiere usar {{network}}."
     }
   },
   "signHandoff": {
