@@ -9,11 +9,25 @@
 //! so a second test running concurrently in this binary would pollute the count.
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
-static COUNTING: AtomicBool = AtomicBool::new(false);
+thread_local! {
+    /// Counting is ON for the measuring thread only. A process-wide flag also
+    /// counted whatever another thread allocated meanwhile — libtest's main
+    /// thread runs beside the test's — so a busy CI runner now and then read
+    /// 2 for an assembly that does 1 (PR #588's `rust` job, on a release commit
+    /// that touched no Rust). `const`-initialised `Cell<bool>`: no lazy
+    /// initialisation and no destructor, so reading it allocates nothing.
+    static COUNTING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether this thread is measuring; `false` while its thread-locals are torn down.
+fn counting() -> bool {
+    COUNTING.try_with(Cell::get).unwrap_or(false)
+}
 
 struct CountingAllocator;
 
@@ -21,7 +35,7 @@ struct CountingAllocator;
 // behaviour is a relaxed counter increment, which cannot allocate or unwind.
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if COUNTING.load(Ordering::Relaxed) {
+        if counting() {
             ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
         }
         unsafe { System.alloc(layout) }
@@ -32,7 +46,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        if COUNTING.load(Ordering::Relaxed) {
+        if counting() {
             // A realloc means the capacity estimate was wrong — exactly the
             // regression this test exists to catch, so it counts.
             ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
@@ -47,9 +61,9 @@ static ALLOC: CountingAllocator = CountingAllocator;
 /// Measure allocations performed by `f`, excluding anything before or after.
 fn count_allocations<T>(f: impl FnOnce() -> T) -> (T, usize) {
     ALLOCATIONS.store(0, Ordering::Relaxed);
-    COUNTING.store(true, Ordering::Relaxed);
+    COUNTING.set(true);
     let out = f();
-    COUNTING.store(false, Ordering::Relaxed);
+    COUNTING.set(false);
     (out, ALLOCATIONS.load(Ordering::Relaxed))
 }
 
