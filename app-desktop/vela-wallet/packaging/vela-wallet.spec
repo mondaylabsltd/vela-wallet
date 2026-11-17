@@ -87,6 +87,15 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Tue Nov 17 2026 Monday Labs <hello@getvela.app> - 0.9.12-1
+- Pre-release: Any website can now open the Vela web wallet in a window of its
+  own: connect, sign in, sign and pay there with your passkey, with nothing to
+  install, and create a wallet in the same window if you have none. Sites you
+  connect this way are listed in Settings, where you can disconnect them. When a
+  site asks for a test network while Vela shows real networks, Vela offers to
+  switch instead of refusing. On iPhone, a multisig proposal now opens reliably
+  after you press Propose.
+
 * Mon Nov 16 2026 Monday Labs <hello@getvela.app> - 0.9.11-1
 - Pre-release: Multisig accounts arrive on every platform: create one, add one
   you already belong to, or import a Safe{Wallet} export, then propose, approve
