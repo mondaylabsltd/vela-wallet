@@ -324,6 +324,47 @@ test.describe('Vela Connect', () => {
 		await context.close();
 	});
 
+	test('a network of the other space: the window offers the switch; declined is 4001, switched is the chain', async ({
+		browser,
+		baseURL
+	}) => {
+		const context = await browser.newContext({ viewport: { width: 420, height: 800 } });
+		await stubChain(context);
+		await enterWallet(context);
+		const site = await openSite(context, baseURL!);
+		const popup = await clickOpening(context, site, 'connect');
+		await popup.getByRole('button', { name: 'Connect', exact: true }).click();
+		await answerFor(site, 'connect');
+
+		// Arc Testnet, while the wallet shows its mainnet networks.
+		await site.fill('#chain', '5042002');
+		await site.click('#switch');
+		const card = popup.locator('[data-testid="connect-window"][data-stage="space"]');
+		await expect(card).toBeVisible({ timeout: 30_000 });
+		await expect(popup.getByTestId('connect-space')).toContainText('wants to use Arc Testnet');
+		// Declined: 4001, saying which space has it — not 4902, which would send a site to add the chain and ask again.
+		await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+		const declined = await answerFor(site, 'switch');
+		expect(declined).toMatchObject({ code: 4001 });
+		expect(declined.message).toContain('testnet');
+
+		await site.click('#switch');
+		await expect(card).toBeVisible({ timeout: 30_000 });
+		await popup.getByRole('button', { name: /^Switch to the testnet space$/ }).click();
+		expect(await answerFor(site, 'switch', 1)).toEqual({ label: 'switch', result: null });
+		await expect(popup.getByTestId('connect-window')).toHaveAttribute('data-stage', 'idle');
+		await expect(popup.getByTestId('testnet-bar')).toBeVisible();
+		const chain = await site.evaluate(() =>
+			(
+				window as unknown as {
+					demo: { vela: { request(m: string): Promise<unknown> } };
+				}
+			).demo.vela.request('eth_chainId')
+		);
+		expect(chain).toBe('0x4cef52');
+		await context.close();
+	});
+
 	test('the person closing the window before deciding is a decline (4001)', async ({
 		browser,
 		baseURL

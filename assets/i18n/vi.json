@@ -1232,7 +1232,8 @@
    "unverifiedTitle": "Mở từ một liên kết",
    "unverifiedBody": "Vela không thể xác nhận {{host}} đã đưa bạn đến đây. Mọi thứ bạn chấp thuận chỉ được gửi về {{host}}, vì vậy chỉ tiếp tục nếu bạn đến từ đó.",
    "continueLabel": "Tiếp tục",
-   "returning": "Đang quay lại {{host}}…"
+   "returning": "Đang quay lại {{host}}…",
+   "spaceAsk": "{{host}} muốn dùng {{network}}."
   }
  },
  "signHandoff": {

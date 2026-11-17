@@ -155,7 +155,8 @@
       "unverifiedTitle": "リンクから開かれました",
       "unverifiedBody": "{{host}} があなたをここへ送ったことを Vela は確認できません。承認した内容は {{host}} にだけ返されます。そこから来た場合にのみ続けてください。",
       "continueLabel": "続ける",
-      "returning": "{{host}} に戻っています…"
+      "returning": "{{host}} に戻っています…",
+      "spaceAsk": "{{host}} が {{network}} を使おうとしています。"
     }
   },
   "signHandoff": {

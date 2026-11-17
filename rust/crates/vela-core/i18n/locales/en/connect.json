@@ -155,7 +155,8 @@
       "unverifiedTitle": "Opened from a link",
       "unverifiedBody": "Vela can’t confirm that {{host}} sent you here. Whatever you approve goes back only to {{host}}, so continue only if you came from there.",
       "continueLabel": "Continue",
-      "returning": "Returning to {{host}}…"
+      "returning": "Returning to {{host}}…",
+      "spaceAsk": "{{host}} wants to use {{network}}."
     }
   },
   "signHandoff": {

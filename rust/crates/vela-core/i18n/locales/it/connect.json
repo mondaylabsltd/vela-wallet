@@ -155,7 +155,8 @@
       "unverifiedTitle": "Aperto da un link",
       "unverifiedBody": "Vela non può confermare che sia stato {{host}} a mandarti qui. Ciò che approvi torna solo a {{host}}: continua solo se arrivi da lì.",
       "continueLabel": "Continua",
-      "returning": "Ritorno a {{host}}…"
+      "returning": "Ritorno a {{host}}…",
+      "spaceAsk": "{{host}} vuole usare {{network}}."
     }
   },
   "signHandoff": {

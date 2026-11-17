@@ -155,7 +155,8 @@
       "unverifiedTitle": "Bir bağlantıdan açıldı",
       "unverifiedBody": "Vela, seni buraya {{host}} sitesinin gönderdiğini doğrulayamıyor. Onayladığın her şey yalnızca {{host}} sitesine döner; yalnızca oradan geldiysen devam et.",
       "continueLabel": "Devam et",
-      "returning": "{{host}} sitesine dönülüyor…"
+      "returning": "{{host}} sitesine dönülüyor…",
+      "spaceAsk": "{{host}}, {{network}} ağını kullanmak istiyor."
     }
   },
   "signHandoff": {

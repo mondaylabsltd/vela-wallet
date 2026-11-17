@@ -1470,8 +1470,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   cannot confirm (`unverifiedTitle`, `unverifiedBody`, `continueLabel`) and
 //   the way back (`returning`). 2334 + 14 + 1 = 2349 paths, 2224 leaves,
 //   125 branches.
-if (PATHS.length !== 2349) fail(`expected 2349 paths (2224 leaf + 125 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2224) fail(`expected 2224 leaf paths, got ${leafSet.size}`);
+// 2350 (spec 109, the same day): + `connect.velaConnect.spaceAsk` — a site
+//   asks for a network of the other space, and the window offers the switch
+//   ("{{host}} wants to use {{network}}.", over the spaces' own switch
+//   words). 2349 + 1 = 2350 paths, 2225 leaves.
+if (PATHS.length !== 2350) fail(`expected 2350 paths (2225 leaf + 125 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2225) fail(`expected 2225 leaf paths, got ${leafSet.size}`);
 
 if (branchSet.size !== 125) fail(`expected 125 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):

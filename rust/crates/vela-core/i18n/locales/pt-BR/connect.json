@@ -155,7 +155,8 @@
       "unverifiedTitle": "Aberto por um link",
       "unverifiedBody": "A Vela não consegue confirmar que {{host}} enviou você até aqui. O que você aprovar volta apenas para {{host}}, então continue só se veio de lá.",
       "continueLabel": "Continuar",
-      "returning": "Voltando para {{host}}…"
+      "returning": "Voltando para {{host}}…",
+      "spaceAsk": "{{host}} quer usar {{network}}."
     }
   },
   "signHandoff": {

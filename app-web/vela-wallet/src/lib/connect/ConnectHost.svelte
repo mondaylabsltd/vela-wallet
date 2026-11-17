@@ -62,7 +62,8 @@
 	import { chainName } from '#lib/services/networks.ts';
 	import { chainLogoURL } from '#lib/flows/marks.ts';
 	import { SIGN_IN_PARAM, STAY_PARAM } from '#lib/intro/gate.ts';
-	import { handle, originChain } from './answers';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import { handle, originChain, type Handling } from './answers';
 	import {
 		PopupChannel,
 		RedirectChannel,
@@ -112,6 +113,8 @@
 		/** A redirect request: said first, that Vela cannot confirm who asked. */
 		| { kind: 'unverified' }
 		| { kind: 'consent'; address: string | null }
+		/** The site asks for a network of the other space: switch Vela's space for it? */
+		| { kind: 'space'; chainId: number; space: 'mainnet' | 'testnet' }
 		| { kind: 'signing' };
 
 	let stage = $state<Stage>({ kind: 'boot' });
@@ -252,7 +255,9 @@
 		const handling = refused
 			? ({ kind: 'answer', answer: { error: { code: 4200, message: refused } } } as const)
 			: await handle(request, request.origin, signedIn() ? session.view.address : null);
-		if (handling.kind === 'answer') {
+		if (handling.kind === 'space') {
+			spaceAsks.set(request, handling);
+		} else if (handling.kind === 'answer') {
 			await send(request, handling.answer);
 			if (channel?.kind === 'redirect') {
 				if (!heldAnswer) stage = { kind: 'returning' };
@@ -262,6 +267,11 @@
 		queue.push(request);
 		void takeNext();
 	}
+
+	/** Requests asking for a network of the other space, waiting for the person's switch. */
+	// Not reactive state: the stage carries what is on screen.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const spaceAsks = new Map<ChannelRequest, Extract<Handling, { kind: 'space' }>>();
 
 	/**
 	 * What the core reads a site's chain from: the snapshot (who is signed in,
@@ -300,6 +310,12 @@
 
 	async function proceed(request: ChannelRequest): Promise<void> {
 		if (current !== request) return;
+		const ask = spaceAsks.get(request);
+		if (ask) {
+			// A space switch needs no account: only the person's yes.
+			stage = { kind: 'space', chainId: ask.chainId, space: ask.space };
+			return;
+		}
 		if (!signedIn()) {
 			stage = { kind: 'no-wallet' };
 			return;
@@ -562,6 +578,49 @@
 		await finish(request, declined);
 	}
 
+	/**
+	 * The person switches Vela's space for the site (the same intent the
+	 * space's own switch takes), and the request is answered as it would have
+	 * been in that space: the site's network is set.
+	 */
+	async function onSpaceSwitch(): Promise<void> {
+		const request = current;
+		const ask = request ? spaceAsks.get(request) : undefined;
+		if (!request || !ask || busy) return;
+		busy = true;
+		let answer: WireAnswer = { error: ask.refusal };
+		try {
+			const { intents } = await import('#lib/intents/index.svelte.ts');
+			await intents.invoke('person', { type: 'set_network_space', space: ask.space });
+			// The catalog sites are served from follows the space now in front.
+			await publishExtChains();
+			const handling = await handle(
+				request,
+				request.origin,
+				signedIn() ? session.view.address : null
+			);
+			if (handling.kind === 'answer') answer = handling.answer;
+		} catch (error) {
+			console.warn('[connect] space switch failed:', error);
+		}
+		spaceAsks.delete(request);
+		await finish(request, answer);
+	}
+
+	/**
+	 * Not switched: the person declined the switch (EIP-3326: 4001), which
+	 * space has the network said with it. Not 4902 — that tells a site to
+	 * `wallet_addEthereumChain`, which would only ask the person again.
+	 */
+	async function onSpaceKeep(): Promise<void> {
+		const request = current;
+		const ask = request ? spaceAsks.get(request) : undefined;
+		if (!request || !ask || busy) return;
+		busy = true;
+		spaceAsks.delete(request);
+		await finish(request, { error: { code: 4001, message: ask.refusal.message } });
+	}
+
 	function onContinueUnverified(): void {
 		unverifiedSeen = true;
 		const held = heldAnswer;
@@ -618,6 +677,8 @@
 		};
 	});
 	const consentNetwork = $derived({ name: chainName(chainId), logoUrl: chainLogoURL(chainId) });
+	const spaceWords = $derived(networkSpace.words);
+	const spaceNetwork = $derived(stage.kind === 'space' ? chainName(stage.chainId) : '');
 </script>
 
 <!--
@@ -693,6 +754,22 @@
 				</Button>
 				<Button variant="primary" shape="rounded" loading={busy} onclick={onConnect}>
 					{rm.connect}
+				</Button>
+			</div>
+		{:else if stage.kind === 'space' && current && spaceWords}
+			<h1>{spaceWords.title}</h1>
+			<p class="body" data-testid="connect-space">
+				{fill(m.spaceAsk).replaceAll('{{network}}', spaceNetwork)}
+			</p>
+			<p class="body">
+				{stage.space === 'testnet' ? spaceWords.testnetHint : spaceWords.mainnetHint}
+			</p>
+			<div class="actions">
+				<Button variant="secondary" shape="rounded" disabled={busy} onclick={onSpaceKeep}>
+					{spaceWords.cancel}
+				</Button>
+				<Button variant="primary" shape="rounded" loading={busy} onclick={onSpaceSwitch}>
+					{stage.space === 'testnet' ? spaceWords.toTestnet : spaceWords.toMainnet}
 				</Button>
 			</div>
 		{:else if stage.kind === 'idle' && stage.answered && host}

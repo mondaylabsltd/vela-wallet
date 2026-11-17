@@ -63,6 +63,10 @@ redirect mode and in the clients, and each is closed:
     `ConnectHost.svelte` (the lifecycle), `messages.ts` (`connect.velaConnect.*`, 14 words in 15 languages).
   - `src/lib/dapp/area.ts` — the grants' storage off the extension; `request.ts` answers through any transport.
   - The wallet page sends a window that left to create a wallet back to `/dapp`.
+- A site asking for a network of Vela's other space (sub3 on Arc Testnet while Vela shows mainnets) gets a card in
+  the window: "{site} wants to use {network}", over the spaces' own switch words. Switched: the site's network is
+  set (`null`); declined: `4001` naming the space — not `4902`, which sends a site to `wallet_addEthereumChain`
+  and asks again. Found walking sub3 on Arc Testnet with a virtual passkey (2026-11-17).
 - Tests: `src/lib/connect/*.test.ts` (wire, channel pinning, batches), `e2e/vela-connect.e2e.ts` (connect, sign, pay
   and follow, read-only answers, revoke, decline by Cancel and by closing, redirect with its warning, a bad link,
   opened directly; Settings lists and revokes).
@@ -79,6 +83,4 @@ redirect mode and in the clients, and each is closed:
 
 - Multisig accounts through the window (the proposal flow).
 - `wallet_addEthereumChain` for a network Vela lacks (spec 100's sheet).
-- A test-network request while the person is in the mainnet space: today an honest 4902 naming the space; a card
-  that offers the switch would be kinder.
 - The phones: the redirect URL as a universal / app link, so an installed app takes the request.

@@ -1237,7 +1237,8 @@
    "unverifiedTitle": "Abierto desde un enlace",
    "unverifiedBody": "Vela no puede confirmar que {{host}} te envió aquí. Lo que apruebes solo regresa a {{host}}, así que continúa solo si vienes de ahí.",
    "continueLabel": "Continuar",
-   "returning": "Volviendo a {{host}}…"
+   "returning": "Volviendo a {{host}}…",
+   "spaceAsk": "{{host}} quiere usar {{network}}."
   }
  },
  "signHandoff": {

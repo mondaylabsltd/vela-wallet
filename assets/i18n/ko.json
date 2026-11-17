@@ -1232,7 +1232,8 @@
    "unverifiedTitle": "링크로 열림",
    "unverifiedBody": "{{host}}이(가) 이곳으로 보냈는지 Vela는 확인할 수 없습니다. 승인한 내용은 {{host}}(으)로만 돌아가므로, 그곳에서 왔을 때만 계속하세요.",
    "continueLabel": "계속",
-   "returning": "{{host}}(으)로 돌아가는 중…"
+   "returning": "{{host}}(으)로 돌아가는 중…",
+   "spaceAsk": "{{host}}에서 {{network}}을(를) 사용하려고 합니다."
   }
  },
  "signHandoff": {

@@ -14,6 +14,7 @@ import {
 	parseChainId,
 	switchChainParam,
 	switchRefusal,
+	chainKnown,
 	toHexChainId,
 	withLastChain
 } from '../../../extension/lib/protocol.js';
@@ -38,7 +39,12 @@ export type Handling =
 	/** Answered — send it. */
 	| { kind: 'answer'; answer: WireAnswer }
 	/** A person decides: the consent card or the signing sheet. */
-	| { kind: 'person'; route: 'connect' | 'sign' };
+	| { kind: 'person'; route: 'connect' | 'sign' }
+	/**
+	 * A switch to a network of the OTHER space (spec 105): the person may
+	 * switch Vela's space for it, or not — `refusal` is the answer if not.
+	 */
+	| { kind: 'space'; chainId: number; space: 'mainnet' | 'testnet'; refusal: WireError };
 
 /** `5730`, EIP-5792: a batch id this wallet does not know (for this site). */
 export const UNKNOWN_BUNDLE_ID = 5730;
@@ -162,7 +168,14 @@ async function switchTo(params: unknown[], origin: string): Promise<Handling> {
 	const table = all[CHAINS_KEY];
 	if (!area || !table) return err(4900, 'Vela has not loaded its networks yet — try again');
 	const refused = switchRefusal(table, chainId) as WireError | null;
-	if (refused) return err(refused.code, refused.message);
+	if (refused) {
+		// A network Vela has, in the space not in front: the person is asked.
+		if (chainKnown(table, chainId)) {
+			const space = (table as { space?: string }).space === 'testnet' ? 'mainnet' : 'testnet';
+			return { kind: 'space', chainId, space, refusal: refused };
+		}
+		return err(refused.code, refused.message);
+	}
 	await area.set({ [CHAIN_PREFIX + origin]: chainId });
 	const last = withLastChain(table, all[LAST_CHAIN_KEY], chainId);
 	if (last) await area.set({ [LAST_CHAIN_KEY]: last });

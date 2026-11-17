@@ -201,7 +201,7 @@ Your part: `return` should be an exact page of yours that handles the answer and
 | `wallet_getPermissions` | No | EIP-2255 permissions |
 | `wallet_revokePermissions` | No | `null`; the site is disconnected. Popup mode only |
 | `eth_chainId` | No | The chain this site is on, hex |
-| `wallet_switchEthereumChain` | No | `null`, or 4902 (§5.2). Popup mode only |
+| `wallet_switchEthereumChain` | No, unless the chain is in Vela's other space (§5.2) | `null`, 4001 or 4902 (§5.2). Popup mode only |
 | `wallet_addEthereumChain` | No | Same as switch, for a chain Vela has; 4902 otherwise. Popup mode only |
 | `wallet_getCapabilities` | No | EIP-5792 capabilities (atomic batches on every chain Vela has) |
 | `personal_sign` | Yes, the signing sheet | Signature (§5.3). Popup mode only |
@@ -233,7 +233,12 @@ its own `wallet_switchEthereumChain`. Switch first, then send what you want on t
 chain the site is on and refuses a request that names another.
 
 Vela keeps test networks and real networks apart. A switch to a test network while the person uses real
-networks (or the other way round) is `4902` with a message that says so; the person changes it in Vela.
+networks (or the other way round) asks the person: Vela's window offers to change to the other space. Switched:
+`null`, as any switch. Declined: `4001`, with a message saying which space has the network — do not follow it with
+`wallet_addEthereumChain`, which would only ask again. A chain Vela does not have at all is `4902`.
+
+Switching before `eth_requestAccounts` is allowed, and kinder: the connect card then names the network the site is
+on.
 
 ### 5.3 Signatures
 

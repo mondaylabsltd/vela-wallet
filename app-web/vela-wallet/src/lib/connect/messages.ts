@@ -21,8 +21,9 @@ export const CONNECT_KEYS = {
 	unverifiedTitle: 'connect.velaConnect.unverifiedTitle',
 	unverifiedBody: 'connect.velaConnect.unverifiedBody',
 	continueLabel: 'connect.velaConnect.continueLabel',
-	returning: 'connect.velaConnect.returning'
+	returning: 'connect.velaConnect.returning',
+	spaceAsk: 'connect.velaConnect.spaceAsk'
 } as const;
 
-/** Templates take `{{host}}`: the requester's host, the browser's fact. */
+/** Templates take `{{host}}`: the requester's host, the browser's fact; `spaceAsk` also `{{network}}`. */
 export type ConnectMessages = Record<keyof typeof CONNECT_KEYS, string>;

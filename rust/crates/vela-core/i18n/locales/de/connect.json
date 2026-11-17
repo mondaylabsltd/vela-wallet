@@ -155,7 +155,8 @@
       "unverifiedTitle": "Über einen Link geöffnet",
       "unverifiedBody": "Vela kann nicht bestätigen, dass {{host}} dich hierher geschickt hat. Was du bestätigst, geht nur an {{host}} zurück – fahre also nur fort, wenn du von dort kommst.",
       "continueLabel": "Weiter",
-      "returning": "Zurück zu {{host}}…"
+      "returning": "Zurück zu {{host}}…",
+      "spaceAsk": "{{host}} möchte {{network}} verwenden."
     }
   },
   "signHandoff": {

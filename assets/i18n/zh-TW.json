@@ -1232,7 +1232,8 @@
    "unverifiedTitle": "透過連結開啟",
    "unverifiedBody": "Vela 無法確認是 {{host}} 讓你來到這裡。你核准的任何內容只會回傳給 {{host}}，請只在確實從那裡過來時繼續。",
    "continueLabel": "繼續",
-   "returning": "正在返回 {{host}}…"
+   "returning": "正在返回 {{host}}…",
+   "spaceAsk": "{{host}} 想使用 {{network}}。"
   }
  },
  "signHandoff": {

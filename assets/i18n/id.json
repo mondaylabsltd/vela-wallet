@@ -1232,7 +1232,8 @@
    "unverifiedTitle": "Dibuka dari tautan",
    "unverifiedBody": "Vela tidak bisa memastikan bahwa {{host}} yang mengirim Anda ke sini. Apa pun yang Anda setujui hanya kembali ke {{host}}, jadi lanjutkan hanya jika Anda datang dari sana.",
    "continueLabel": "Lanjutkan",
-   "returning": "Kembali ke {{host}}…"
+   "returning": "Kembali ke {{host}}…",
+   "spaceAsk": "{{host}} ingin menggunakan {{network}}."
   }
  },
  "signHandoff": {
