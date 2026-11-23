@@ -30,7 +30,7 @@
     "@noble/hashes": "^2.4.0",
     "i18next": "^26.7.2",
     "identicons-esm": "1.0.1",
-    "viem": "2.54.6",
+    "viem": "2.57.20",
     "yaml": "2.9.1"
   }
 }
